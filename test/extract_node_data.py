@@ -5,13 +5,29 @@ import json
 import argparse
 
 
+def file_base_name(file_name):
+    if '.' in file_name:
+        separator_index = file_name.index('.')
+        base_name = file_name[:separator_index]
+        return base_name
+    else:
+        return file_name
+
+
+def path_base_name(path):
+    file_name = os.path.basename(path)
+    return file_base_name(file_name)
+
+
 def main(args):
 
-    if args.input is None:
-        print('Error: --input must be specified.')
+    if args.input_path is None:
+        print('Error: --input-path must be specified.')
         return
     
-    with open(args.input) as f:
+    os.makedirs(args.output_dir, exist_ok = True)
+    
+    with open(args.input_path) as f:
         data = json.load(f)
     
     nodes = [item for item in data if item['cat'] == 'Node']
@@ -41,15 +57,20 @@ def main(args):
         }
         node_infos.append(info)
     
-    with open(args.output_json, 'w') as f:
+    # save in json format
+    base_name = path_base_name(args.input_path)
+    output_json = os.path.join(args.output_dir, 'nodes_' + base_name + '.json')
+    with open(output_json, 'w') as f:
         json.dump(node_infos, f, indent = 2)
     
     # process energy
     for item in node_infos:
         item['gpu_energy'] = item['gpu_energy'].strip('[]').split(',')[args.gpu_id]
 
+    # save in csv format
+    output_csv = os.path.join(args.output_dir, 'nodes_' + base_name + '.csv')
     fieldnames = list(node_infos[0].keys())
-    with open(args.output_csv, 'w') as f:
+    with open(output_csv, 'w') as f:
         f_csv = csv.DictWriter(f, fieldnames)
         f_csv.writeheader()
         f_csv.writerows(node_infos)
@@ -58,12 +79,25 @@ def main(args):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser('Extract Node Data from Profiling Results.')
-    parser.add_argument('--input', type = str, default = None)
-    parser.add_argument('--output_json', type = str, default = 'node_infos.json')
-    parser.add_argument('--output_csv', type = str, default = 'node_infos.csv')
+    parser.add_argument('--input-path', type = str, default = None)
+    parser.add_argument('--input-dir', type = str, default = None)
+    parser.add_argument('--output-dir', type = str, default = './experiment_data/onnx_output/profile_nodes/')
     parser.add_argument('--gpu_id', type = int, default = 0)
 
     args = parser.parse_args()
     print(args)
 
-    main(args)
+    if args.input_path:
+        main(args)
+    elif args.input_dir:
+        records = os.listdir(args.input_dir)
+        records = [item for item in records if item.split('.')[-1] == 'json']
+        for record in records:
+            args.input_path = os.path.join(args.input_dir, record)
+            try:
+                main(args)
+            except Exception as e:
+                print('Error:', e)
+    else:
+        print('Error: input is not specified.')
+        sys.exit(-1)

@@ -107,12 +107,14 @@ int main(int argc, char** argv)
     std::string strOptimizedModel = "";
     std::string strGPUReadingCSV = "gpu_readings.csv";
     std::string strLogTXT = "running_logs.txt";
+    unsigned int nNumRepeat = 1;
 
     CmdLine cmd;
     cmd.add(make_option('i', strModel, "model"));
     cmd.add(make_option('o', strOptimizedModel, "optimized_model"));
     cmd.add(make_option('g', strGPUReadingCSV, "gpu_readings"));
     cmd.add(make_option('l', strLogTXT, "logs"));
+    cmd.add(make_option('r', nNumRepeat, "repeat"));
     cmd.process(argc, argv);
 
     if(strModel.empty())
@@ -126,6 +128,7 @@ int main(int argc, char** argv)
 
     GPUInspector& gpu_ins = GPUInspector::Instance();
     gpu_ins.Init(0.01);
+    gpu_ins.SetLoopRepeat(nNumRepeat);
 
     // create environment
     OrtEnv *env;
@@ -233,8 +236,12 @@ int main(int argc, char** argv)
 
     // run inference
     std::cout << "Run begin." << std::endl;
+    unsigned int repeat = gpu_ins.GetLoopRepeat();
     gpu_ins.StartInspect();
-    api->Run(session, NULL, input_names, ort_input_values, n_inputs, output_names, n_outputs, ort_output_values);
+    for(unsigned int i = 0; i < repeat; i++)
+    {
+        api->Run(session, NULL, input_names, ort_input_values, n_inputs, output_names, n_outputs, ort_output_values);
+    }
     gpu_ins.StopInspect();
     std::cout << "Run finished." << std::endl;
 
@@ -245,6 +252,7 @@ int main(int argc, char** argv)
 
     // display log info
     std::cout << "NumDevices = " << gpu_ins.NumDevices() << std::endl;
+    PrintVar(repeat);
 
     // display energy and latency
     std::vector<double> energies;
@@ -259,9 +267,9 @@ int main(int argc, char** argv)
 
     // export latency and energy
     std::ofstream f_log(strLogTXT);
-    f_log << "#model, latency, energy" << std::endl;
-    f_log << fixed;
-    f_log << strModel << "," << gpu_ins.GetDurationInSec();
+    f_log << "#model, repeat, latency, energy" << std::endl;
+    f_log << std::fixed;
+    f_log << strModel << "," << repeat << "," << gpu_ins.GetDurationInSec();
     for(double item : energies)
     {
         f_log << "," << item;
@@ -272,7 +280,7 @@ int main(int argc, char** argv)
     // export GPU readings
     std::ofstream f_gpu(strGPUReadingCSV);
     f_gpu << "#gpu_id, timestamp, used_memory, power, temperature, memory_util, gpu_util" << std::endl;
-    f_gpu << fixed;
+    f_gpu << std::fixed;
     for(unsigned int gpu_id = 0; gpu_id < gpu_ins.NumDevices(); gpu_id++)
     {
         std::vector<GPUInspector::GPUInfo_t> gpu_readings;

@@ -312,7 +312,7 @@ GPUInspector::GPUInspector()
     pthread_inspect_ = nullptr;
 
     // auto init
-    Init();
+    Init(0.01);
 }
 
 GPUInspector::~GPUInspector()

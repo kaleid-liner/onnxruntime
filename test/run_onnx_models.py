@@ -27,13 +27,25 @@ def main(args):
         sys.exit(-1)
     
     os.makedirs(args.output_dir, exist_ok = True)
+    output_sub_dir = os.path.join(args.output_dir, args.mode)
+    os.makedirs(output_sub_dir, exist_ok = True)
 
     base_name = path_base_name(args.model_path)
-    profile_out = os.path.join(args.output_dir, base_name)
 
-    cmd = [args.exec_path, '-i', args.model_path, '-p', profile_out]
-    cmd = ' '.join(cmd)
-    subprocess.run(cmd, shell = True)
+    if args.mode == 'profile':
+        profile_out = os.path.join(output_sub_dir, base_name)
+        cmd = [args.exec_path, '-i', args.model_path, '-p', profile_out]
+        cmd = ' '.join(cmd)
+        print('command:', cmd)
+        subprocess.run(cmd, shell = True)
+    else:
+        gpu_reading = os.path.join(output_sub_dir, base_name + '.csv')
+        logs_txt = os.path.join(output_sub_dir, base_name + '.txt')
+        cmd = [args.exec_path, '-i', args.model_path, '-g', gpu_reading, 
+                '-l', logs_txt, '-r 1000']
+        cmd = ' '.join(cmd)
+        print('command:', cmd)
+        subprocess.run(cmd, shell = True)
 
 
 if __name__ == '__main__':
@@ -41,8 +53,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('Run ONNX Runtime with Onnx Models.')
     parser.add_argument('--model-path', type = str, default = None)
     parser.add_argument('--model-dir', type = str, default = None)
-    parser.add_argument('--output-dir', type = str, default = './onnx_output')
+    parser.add_argument('--output-dir', type = str, default = './experiment_data/onnx_output')
     parser.add_argument('--exec-path', type = str, default = None)
+    parser.add_argument('--mode', type = str, default = 'run', choices = ['run', 'profile'])
 
     args = parser.parse_args()
     print(args)
