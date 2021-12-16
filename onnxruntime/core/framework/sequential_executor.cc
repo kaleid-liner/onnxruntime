@@ -25,6 +25,10 @@
 #include "core/profile/context.h"
 #endif
 
+#if defined(USE_CUDA)
+#include "cuda_energy_profiler.h"
+#endif
+
 // #define TRACE_EXECUTION
 
 // Define this symbol to create Concurrency Visualizer markers.
@@ -298,6 +302,10 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
 
       kernel_begin_time = session_state.Profiler().Start();
 
+#if defined(USE_CUDA)
+      profiling::GPUInspector::Instance().StartInspect();
+#endif
+
       // Calculate total input sizes for this operation.
       CalculateTotalInputSizes(&op_kernel_context, p_op_kernel,
                                input_activation_sizes, input_parameter_sizes, node_name_for_profiling);
@@ -320,7 +328,22 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
         }
 #endif
 
+#if defined(USE_CUDA)
+        if(is_profiler_enabled)
+        {
+          unsigned int loop_repeat = profiling::GPUInspector::Instance().GetLoopRepeat();
+          for(unsigned int i = 0; i < loop_repeat; i++)
+          {
+            compute_status = p_op_kernel->Compute(&op_kernel_context);
+          }
+        }
+        else
+        {
+          compute_status = p_op_kernel->Compute(&op_kernel_context);
+        }
+#else
         compute_status = p_op_kernel->Compute(&op_kernel_context);
+#endif
       }
       ORT_CATCH(const std::exception& ex) {
         ORT_HANDLE_EXCEPTION([&]() {
@@ -364,6 +387,24 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
                 << "\n";
 #endif
 
+#if defined(USE_CUDA)
+      profiling::GPUInspector::Instance().StopInspect();
+      unsigned int loop_repeat = profiling::GPUInspector::Instance().GetLoopRepeat();
+      std::vector<double> energies;
+      profiling::GPUInspector::Instance().CalculateEnergy(energies);
+      std::string gpu_energy = "[";
+      for(size_t i = 0; i < energies.size(); i++)
+      {
+        gpu_energy += std::to_string(energies[i] / static_cast<double>(loop_repeat));
+        if(i < energies.size() - 1)
+        {
+          gpu_energy += ",";
+        }
+      }
+      gpu_energy += "]";
+      double latency = profiling::GPUInspector::Instance().GetDurationInSec() / static_cast<double>(loop_repeat);
+#endif
+
       session_state.Profiler().EndTimeAndRecordEvent(profiling::NODE_EVENT,
                                                      node_name_for_profiling + "_kernel_time",
                                                      kernel_begin_time,
@@ -377,6 +418,11 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
                                                          {"parameter_size", std::to_string(input_parameter_sizes)},
                                                          {"output_size", std::to_string(total_output_sizes)},
                                                          {"thread_scheduling_stats", concurrency::ThreadPool::StopProfiling(session_state.GetThreadPool())},
+#if defined(USE_CUDA)
+                                                         {"gpu_latency", std::to_string(latency)},
+                                                         {"gpu_energy", gpu_energy},
+                                                         {"loop_repeat", std::to_string(loop_repeat)}
+#endif
                                                      });
       sync_time_begin = session_state.Profiler().Start();
     }
