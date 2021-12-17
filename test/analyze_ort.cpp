@@ -6,24 +6,9 @@
 #include <cassert>
 
 #include <onnxruntime_c_api.h>
-// #include "cuda_energy_profiler.h"
 #include "cmdLine.h"
 
 #define PrintVar(x) (std::cout << #x << " = " << x << std::endl)
-
-using std::cout;
-using std::endl;
-// using namespace onnxruntime::profiling;
-
-// void DisplayGPUInfo(const GPUInspector::GPUInfo_t& info)
-// {
-//     PrintVar(info.time_stamp);
-//     PrintVar(info.used_memory_percent);
-//     PrintVar(info.power_watt);
-//     PrintVar(info.temperature);
-//     PrintVar(info.memory_util);
-//     PrintVar(info.gpu_util);
-// }
 
 const OrtTensorTypeAndShapeInfo* GetModelTensorTypeInfo(const OrtApi* api, const OrtSession *session, const size_t index)
 {
@@ -121,10 +106,6 @@ int main(int argc, char** argv)
 
     const OrtApi* api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
     assert(api != NULL);
-
-    // GPUInspector& gpu_ins = GPUInspector::Instance();
-    // gpu_ins.Init();
-    // gpu_ins.StartInspect();
 
     // load model
     OrtEnv *env;
@@ -237,62 +218,11 @@ int main(int argc, char** argv)
     api->Run(session, NULL, input_names, ort_input_values, n_inputs, output_names, n_outputs, ort_output_values);
     std::cout << "Run finished." << std::endl;
 
-    // gpu_ins.StopInspect();
 
     api->ReleaseSessionOptions(session_options);
     api->ReleaseSession(session);
     api->ReleaseEnv(env);
     // api->ReleaseAllocator(allocator);
     
-    // // display output
-    // for(auto& tensor : output)
-    // {
-    //     int n_elements = tensor.GetTypeInfo().GetTensorTypeAndShapeInfo().GetElementCount();
-    //     cout << "n_elements = " << n_elements << endl;
-    //     cout << "data_type = " << tensor.GetTensorTypeAndShapeInfo().GetElementType() << endl;
-    //     const int64_t *data = tensor.GetTensorMutableData<int64_t>();
-    //     for(int n = 0; n < n_elements; n++)
-    //     {
-    //         cout << data[n] << " ";
-    //     }
-    //     cout << endl;
-    // }
-
-/*
-    std::cout << "NumDevices = " << gpu_ins.NumDevices() << std::endl;
-
-    // calculate energy
-    for(unsigned int gpu_id = 0; gpu_id < gpu_ins.NumDevices(); gpu_id++)
-    {
-        double energy = gpu_ins.CalculateEnergy(gpu_id);
-        std::cout << "energy(gpu_id = " << gpu_id << ") = " << energy << std::endl;
-    }
-
-    std::vector<double> energies;
-    gpu_ins.CalculateEnergy(energies);
-    std::cout << "energies(in vector) : ";
-    for(double item : energies)
-    {
-        std::cout << item << " ";
-    }
-    std::cout << std::endl;
-
-    std::cout << "gpu latency = " << gpu_ins.GetDurationInSec() << " second" << std::endl;
-
-    // export GPU readings
-    std::ofstream f_gpu("gpu_readings.csv");
-    f_gpu << "#gpu_id, timestamp, used_memory, power, temperature, memory_util, gpu_util" << std::endl;
-    for(unsigned int gpu_id = 0; gpu_id < gpu_ins.NumDevices(); gpu_id++)
-    {
-        std::vector<GPUInspector::GPUInfo_t> gpu_readings;
-        gpu_ins.ExportReadings(gpu_id, gpu_readings);
-        for(const auto& info : gpu_readings)
-        {
-            f_gpu << gpu_id << "," << info.time_stamp << "," << info.used_memory_percent << "," << info.power_watt << "," 
-                << info.temperature << "," << info.memory_util << "," << info.gpu_util << std::endl;
-        }
-    }
-    f_gpu.close();
-*/
     return 0;
 }
