@@ -32,12 +32,19 @@ def main(args):
     
     nodes = [item for item in data if item['cat'] == 'Node']
     nodes_run=[item for item in nodes if item['name'].endswith('kernel_time')]
-
-    print(len(nodes))
-    print(len(nodes_run))
+    print('Number of Node Kernels:', len(nodes_run))
 
     node_infos = []
     for item in nodes_run:
+        if args.enable_gpu_profile:
+            gpu_energy = item['args']['gpu_energy']
+            gpu_latency = item['args']['gpu_latency']
+            repeat = item['args']['loop_repeat']
+        else:
+            gpu_energy = '[0.0, 0.0]'
+            gpu_latency = '0.0'
+            repeat = '1'
+        
         info = {
             # basic info
             'name' : item['name'],
@@ -46,9 +53,9 @@ def main(args):
             'exec_plan_index' : item['args']['exec_plan_index'],
             'provider' : item['args']['provider'],
             # performance
-            'gpu_energy' : item['args']['gpu_energy'],
-            'gpu_latency' : item['args']['gpu_latency'],
-            'repeat' : item['args']['loop_repeat'],
+            'gpu_energy' : gpu_energy,
+            'gpu_latency' : gpu_latency,
+            'repeat' : repeat,
             'onnx_latency' : item['dur'],
             # size
             'activation_size' : item['args']['activation_size'],
@@ -83,6 +90,7 @@ if __name__ == '__main__':
     parser.add_argument('--input-dir', type = str, default = None)
     parser.add_argument('--output-dir', type = str, default = './experiment_data/onnx_output/profile_nodes/')
     parser.add_argument('--gpu_id', type = int, default = 0)
+    parser.add_argument('--enable-gpu-profile', action = 'store_true', default = False)
 
     args = parser.parse_args()
     print(args)

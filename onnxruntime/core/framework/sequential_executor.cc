@@ -25,7 +25,8 @@
 #include "core/profile/context.h"
 #endif
 
-#if defined(USE_CUDA)
+#define GPU_ENERGY_PROFILE
+#if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
 #include "cuda_energy_profiler.h"
 #endif
 
@@ -302,7 +303,7 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
 
       kernel_begin_time = session_state.Profiler().Start();
 
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
       profiling::GPUInspector::Instance().StartInspect();
 #endif
 
@@ -328,7 +329,7 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
         }
 #endif
 
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
         if(is_profiler_enabled)
         {
           unsigned int loop_repeat = profiling::GPUInspector::Instance().GetLoopRepeat();
@@ -387,7 +388,7 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
                 << "\n";
 #endif
 
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
       profiling::GPUInspector::Instance().StopInspect();
       unsigned int loop_repeat = profiling::GPUInspector::Instance().GetLoopRepeat();
       std::vector<double> energies;
@@ -418,7 +419,7 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
                                                          {"parameter_size", std::to_string(input_parameter_sizes)},
                                                          {"output_size", std::to_string(total_output_sizes)},
                                                          {"thread_scheduling_stats", concurrency::ThreadPool::StopProfiling(session_state.GetThreadPool())},
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
                                                          {"gpu_latency", std::to_string(latency)},
                                                          {"gpu_energy", gpu_energy},
                                                          {"loop_repeat", std::to_string(loop_repeat)}

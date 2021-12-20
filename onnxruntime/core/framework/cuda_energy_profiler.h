@@ -2,7 +2,9 @@
 #ifndef CUDA_ENERGY_PROFILER_H
 #define CUDA_ENERGY_PROFILER_H
 
-#if defined(USE_CUDA)
+#define GPU_ENERGY_PROFILE
+
+#if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
 
 //////////////////////////////////////////////////////////////////////////////
 // Timer.h
@@ -142,5 +144,5 @@ using GPUInfo_t = GPUInspector::GPUInfo_t;
 }  // namespace profiling
 }  // namespace onnxruntime
 
-#endif  // #if defined(USE_CUDA)
+#endif  // #if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
 #endif  // CUDA_ENERGY_PROFILER_H

@@ -32,17 +32,19 @@ def main(args):
             nodes = list(f_csv)
             energies = [float(item['gpu_energy']) for item in nodes]
             latencies = [float(item['gpu_latency']) for item in nodes]
+            onnx_latencies = [float(item['onnx_latency']) / float(item['repeat']) / 1e6 for item in nodes]
             model = '_'.join(path_base_name(node_file).split('_')[2:-5])
             line = {
                 'model' : model,
                 'latency' : sum(latencies),
                 'energy' : sum(energies),
+                'onnx_latency' : sum(onnx_latencies),
             }
             merged_lines.append(line)
 
     merged_lines.sort(key = lambda x : x['model'])
     
-    fieldnames = ['model', 'latency', 'energy']
+    fieldnames = ['model', 'latency', 'energy', 'onnx_latency']
     with open(args.output, 'w') as f:
         f_csv = csv.DictWriter(f, fieldnames)
         f_csv.writeheader()

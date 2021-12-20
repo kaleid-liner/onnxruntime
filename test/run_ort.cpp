@@ -107,6 +107,7 @@ int main(int argc, char** argv)
     std::string strOptimizedModel = "";
     std::string strGPUReadingCSV = "gpu_readings.csv";
     std::string strLogTXT = "running_logs.txt";
+    std::string strProfileOutput = "";
     unsigned int nNumRepeat = 1;
 
     CmdLine cmd;
@@ -115,6 +116,7 @@ int main(int argc, char** argv)
     cmd.add(make_option('g', strGPUReadingCSV, "gpu_readings"));
     cmd.add(make_option('l', strLogTXT, "logs"));
     cmd.add(make_option('r', nNumRepeat, "repeat"));
+    cmd.add(make_option('p', strProfileOutput, "profile_output"));
     cmd.process(argc, argv);
 
     if(strModel.empty())
@@ -144,6 +146,11 @@ int main(int argc, char** argv)
     {
         std::cout << "Optimized model output set to: " << strOptimizedModel << std::endl;
         api->SetOptimizedModelFilePath(session_options, strOptimizedModel.c_str());
+    }
+    if(!strProfileOutput.empty())
+    {
+        std::cout << "Profiling output set to: " << strProfileOutput << std::endl;
+        api->EnableProfiling(session_options, strProfileOutput.c_str());
     }
 
     // enable cuda
