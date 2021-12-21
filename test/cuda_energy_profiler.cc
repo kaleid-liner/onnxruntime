@@ -1,6 +1,6 @@
 #include "cuda_energy_profiler.h"
 
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
 
 namespace onnxruntime {
 
@@ -307,7 +307,7 @@ GPUInspector::GPUInspector()
 
     initialized_ = false;
     running_inspect_ = false;
-    loop_repeat_ = 1;
+    loop_repeat_ = 100000;
     sampling_interval_micro_second_ = 0.05 * 1000000;
     pthread_inspect_ = nullptr;
 
@@ -364,4 +364,4 @@ void GPUInspector::Run()
 }  // namespace profiling
 }  // namespace onnxruntime
 
-#endif  // #if defined(USE_CUDA)
+#endif  // #if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
