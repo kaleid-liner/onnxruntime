@@ -91,17 +91,32 @@ int main(int argc, char** argv)
     std::string strModel = "";
     std::string strOptimizedModel = "";
     std::string strProfileOutput = "";
+    int repeat = 1;
+    bool do_warming_up = false;
 
     CmdLine cmd;
     cmd.add(make_option('i', strModel, "model"));
     cmd.add(make_option('o', strOptimizedModel, "optimized_model"));
     cmd.add(make_option('p', strProfileOutput, "profile_output"));
+    cmd.add(make_option('r', repeat, "repeat"));
+    cmd.add(make_switch('w', "warmup"));
     cmd.process(argc, argv);
 
     if(strModel.empty())
     {
-        std::cout << "Input model must be specified with -i" << std::endl;
+        std::cerr << "Input model must be specified with -i" << std::endl;
         return EXIT_FAILURE;
+    }
+
+    if(repeat <= 0)
+    {
+        std::cerr << "repeat <= 0 (current value: " << repeat << "), using default value 1." << std::endl;
+        repeat = 1;
+    }
+
+    if(cmd.used('w'))
+    {
+        do_warming_up = true;
     }
 
     const OrtApi* api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
@@ -213,11 +228,24 @@ int main(int argc, char** argv)
         api->ReleaseTypeInfo(type_info);
     }
 
+    // warming up
+    if(do_warming_up)
+    {
+        std::cout << "Warming up begin." << std::endl;
+        for(int i = 0; i < 10; i++)
+        {
+            api->Run(session, NULL, input_names, ort_input_values, n_inputs, output_names, n_outputs, ort_output_values);
+        }
+        std::cout << "Warming up finished." << std::endl;
+    }
+
     // run inference
     std::cout << "Run begin." << std::endl;
-    api->Run(session, NULL, input_names, ort_input_values, n_inputs, output_names, n_outputs, ort_output_values);
+    for(int i = 0; i < repeat; i++)
+    {
+        api->Run(session, NULL, input_names, ort_input_values, n_inputs, output_names, n_outputs, ort_output_values);
+    }
     std::cout << "Run finished." << std::endl;
-
 
     api->ReleaseSessionOptions(session_options);
     api->ReleaseSession(session);

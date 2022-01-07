@@ -128,6 +128,7 @@ int main(int argc, char** argv)
     const OrtApi* api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
     assert(api != NULL);
 
+    std::cout << "Get GPUInspector Instance." << std::endl;
     GPUInspector& gpu_ins = GPUInspector::Instance();
     gpu_ins.Init(0.01);
     gpu_ins.SetLoopRepeat(nNumRepeat);
@@ -186,6 +187,7 @@ int main(int argc, char** argv)
     // create session and load model
     OrtSession *session;
     api->CreateSession(env, strModel.c_str(), session_options, &session);
+    std::cout << "Load model finished." << std::endl;
 
     DisplayModelInfo(api, session);
 
@@ -242,15 +244,45 @@ int main(int argc, char** argv)
     }
 
     // run inference
-    std::cout << "Run begin." << std::endl;
     unsigned int repeat = gpu_ins.GetLoopRepeat();
-    gpu_ins.StartInspect();
-    for(unsigned int i = 0; i < repeat; i++)
+    std::vector<double> start_cost, stop_cost;
+    for(int i = 0; i < 20; i++)
     {
-        api->Run(session, NULL, input_names, ort_input_values, n_inputs, output_names, n_outputs, ort_output_values);
+        {
+            onnxruntime::profiling::Timer timer;
+            timer.start();
+            gpu_ins.StartInspect();
+            timer.stop();
+            start_cost.push_back(timer.getElapsedTimeInMicroSec());
+            std::cout << "Start GPUInspect cost " << timer.getElapsedTimeInMicroSec() << " micro second." << std::endl;
+        }
+        std::cout << "Run begin." << std::endl;
+        for(unsigned int i = 0; i < repeat; i++)
+        {
+            api->Run(session, NULL, input_names, ort_input_values, n_inputs, output_names, n_outputs, ort_output_values);
+        }
+        std::cout << "Run finished." << std::endl;
+        {
+            onnxruntime::profiling::Timer timer;
+            timer.start();
+            gpu_ins.StopInspect();
+            timer.stop();
+            stop_cost.push_back(timer.getElapsedTimeInMicroSec());
+            std::cout << "Stop GPUInspect cost " << timer.getElapsedTimeInMicroSec() << " micro second." << std::endl;
+        }
     }
-    gpu_ins.StopInspect();
-    std::cout << "Run finished." << std::endl;
+
+    // cost stats
+    assert(start_cost.size() == stop_cost.size());
+    double sum_start = 0, sum_stop = 0;
+    std::cout << "timing stats:\nstart  stop" << std::endl;
+    for(int i = 0; i < start_cost.size(); i++)
+    {
+        std::cout << start_cost[i] << "  " << stop_cost[i] << std::endl;
+        sum_start += start_cost[i];
+        sum_stop += stop_cost[i];
+    }
+    std::cout << "avg_start = " << sum_start / start_cost.size() << " , avg_stop = " << sum_stop / stop_cost.size() << std::endl;
 
     api->ReleaseSessionOptions(session_options);
     api->ReleaseSession(session);
@@ -299,6 +331,19 @@ int main(int argc, char** argv)
         }
     }
     f_gpu.close();
+
+    // std::ofstream f_runlog("running_logs.txt");
+    // f_runlog << "thread_id,gpu_id,start_time,end_time" << std::endl;
+    // f_runlog << std::fixed;
+    // auto& run_logs = gpu_ins.running_logs_;
+    // for(int i = 0; i < run_logs.size(); i++)
+    // {
+    //     for(auto& item : run_logs[i])
+    //     {
+    //         f_runlog << item.thread_id << "," << item.gpu_id << "," << item.start_time << "," << item.end_time << std::endl;
+    //     }
+    // }
+    // f_runlog.close();
 
     return 0;
 }

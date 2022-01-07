@@ -141,14 +141,13 @@ GPUInspector& GPUInspector::Instance()
 
 bool GPUInspector::Init(double sampling_interval)
 {
-    if(pthread_inspect_)
+    if(running_inspect_)
     {
-        running_inspect_ = false;
-        pthread_inspect_->join();
-        pthread_inspect_ = nullptr;
+        StopInspect();
         recordings_.clear();
     }
 
+    // get device handle
     unsigned int deviceCount = 0;
     nvmlDeviceGetCount(&deviceCount);
     devices_.resize(deviceCount);
@@ -158,17 +157,42 @@ bool GPUInspector::Init(double sampling_interval)
     }
     recordings_.resize(deviceCount);
 
+    // set flag
     initialized_ = true;
     sampling_interval_micro_second_ = sampling_interval * 1000000;
 
-    // // read GPUInfo once for warming up
-    // for(unsigned int gpu_id = 0; gpu_id < deviceCount; gpu_id++)
-    // {
-    //     GetGPUInfo(devices_[gpu_id]);
-    // }
+    // print for debugging
     std::cout << "GPUInspector initialized, numDevices = " << deviceCount << ", sampling interval = " << sampling_interval << std::endl;
     
     return true;
+}
+
+void GPUInspector::StartInspect()
+{
+    CheckInit();
+    
+    request_start_ = true;
+    cv.notify_all();
+
+    {
+        std::unique_lock<std::mutex> lock(mMutexThread);
+        cv.wait(lock, [this](){ return running_inspect_; });
+        request_start_ = false;
+    }
+}
+
+void GPUInspector::StopInspect()
+{
+    if(!running_inspect_)
+    {
+        throw std::runtime_error("GPUInspector not started while requested to stop.");
+    }
+    running_inspect_ = false;
+    {
+        std::unique_lock<std::mutex> lock(mMutexThread);
+        cv.wait(lock, [this](){ return inspect_stoped_; });
+        inspect_stoped_ = false;
+    }
 }
 
 GPUInfo_t GPUInspector::GetGPUInfo(const nvmlDevice_t& device)
@@ -204,28 +228,6 @@ GPUInfo_t GPUInspector::GetGPUInfo(unsigned int gpu_id)
         throw std::runtime_error("Invalid gpu_id while getting GPU Info.");
     }
     return GetGPUInfo(devices_[gpu_id]);
-}
-
-void GPUInspector::StartInspect()
-{
-    CheckInit();
-    pthread_inspect_ = std::shared_ptr<std::thread>(
-        new std::thread(&GPUInspector::Run, this));
-    while(!running_inspect_)
-    {
-        std::this_thread::sleep_for(std::chrono::nanoseconds(5));
-    }
-}
-
-void GPUInspector::StopInspect()
-{
-    if(!running_inspect_)
-    {
-        throw std::runtime_error("GPUInspector not started while requested to stop.");
-    }
-    running_inspect_ = false;
-    pthread_inspect_->join();
-    pthread_inspect_ = nullptr;
 }
 
 void GPUInspector::ExportReadings(unsigned int gpu_id, std::vector<GPUInfo_t>& readings) const
@@ -306,18 +308,37 @@ GPUInspector::GPUInspector()
     nvmlInit();
 
     initialized_ = false;
-    running_inspect_ = false;
-    loop_repeat_ = 100;
     sampling_interval_micro_second_ = 0.05 * 1000000;
-    pthread_inspect_ = nullptr;
+    loop_repeat_ = 1;
 
-    // auto init
+    request_start_ = false;
+    inspect_stoped_ = false;
+    running_inspect_ = false;
+    terminate_ = false;
+
+    // start thread
+    pthread_inspect_ = std::shared_ptr<std::thread>(
+        new std::thread(&GPUInspector::ThreadLoop, this));
+
+    // auto init for debugging
     Init(0.01);
 }
 
 GPUInspector::~GPUInspector()
 {
     nvmlShutdown();
+
+    // stop thread
+    if(running_inspect_)
+    {
+        StopInspect();
+    }
+    {
+        std::unique_lock<std::mutex> lock(mMutexThread);
+        terminate_ = true;
+    }
+    cv.notify_all();
+    pthread_inspect_->join();
 }
 
 inline void GPUInspector::CheckInit() const
@@ -332,8 +353,11 @@ void GPUInspector::Run()
 {
     recordings_.clear();
     recordings_.resize(devices_.size());
-    timer_.start();
+
     running_inspect_ = true;
+    cv.notify_all();
+    
+    timer_.start();
     while(running_inspect_)
     {
         Timer local_timer;
@@ -355,10 +379,31 @@ void GPUInspector::Run()
         }
         // else
         // {
-        //     std::cerr << "Exceeded sampling interval, time cost = " << local_timer.getElapsedTimeInSec() << std::endl;
+        //     std::cerr << "Exceeded sampling interval, time cost = " << local_timer.getElapsedTimeInMicroSec() << " micro second" << std::endl;
         // }
     }
     timer_.stop();
+
+    inspect_stoped_ = true;
+    cv.notify_all();
+}
+
+void GPUInspector::ThreadLoop()
+{
+    std::cout << "Main Inspect Thread Started." << std::endl;
+    while(true)
+    {
+        {
+            std::unique_lock<std::mutex> lock(mMutexThread);
+            cv.wait(lock, [this]() { return (request_start_ || terminate_); });
+            if(terminate_)
+            {
+                break;
+            }
+        }
+        Run();
+    }
+    std::cout << "Main Inspect Thread Stoped." << std::endl;
 }
 
 }  // namespace profiling

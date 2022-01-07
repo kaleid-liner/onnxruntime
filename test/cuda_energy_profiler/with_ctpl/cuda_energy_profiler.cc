@@ -128,6 +128,7 @@ double Timer::getElapsedTime()
 
 #include <stdexcept>
 #include <iostream>
+#include "ctpl_stl.h"
 
 namespace onnxruntime {
 
@@ -139,16 +140,15 @@ GPUInspector& GPUInspector::Instance()
     return instance;
 }
 
-bool GPUInspector::Init(double sampling_interval)
+bool GPUInspector::Init(double sampling_interval, bool parallel_reading)
 {
-    if(pthread_inspect_)
+    if(pthread_pool_)
     {
         running_inspect_ = false;
-        pthread_inspect_->join();
-        pthread_inspect_ = nullptr;
-        recordings_.clear();
+        pthread_pool_->stop();
     }
 
+    // get device handle
     unsigned int deviceCount = 0;
     nvmlDeviceGetCount(&deviceCount);
     devices_.resize(deviceCount);
@@ -156,16 +156,21 @@ bool GPUInspector::Init(double sampling_interval)
     {
         nvmlDeviceGetHandleByIndex(gpu_id, &devices_[gpu_id]);
     }
+    recordings_.clear();
     recordings_.resize(deviceCount);
+
+    // create thread pool
+    parallel_reading_ = parallel_reading;
+    int n_threads = parallel_reading_ ? deviceCount + 2 : 2;
+    pthread_pool_ = std::unique_ptr<ctpl::thread_pool>(new ctpl::thread_pool(n_threads));
+    while(pthread_pool_->n_idle() != pthread_pool_->size())
+    {
+        std::this_thread::sleep_for(std::chrono::nanoseconds(5));
+    }
 
     initialized_ = true;
     sampling_interval_micro_second_ = sampling_interval * 1000000;
 
-    // // read GPUInfo once for warming up
-    // for(unsigned int gpu_id = 0; gpu_id < deviceCount; gpu_id++)
-    // {
-    //     GetGPUInfo(devices_[gpu_id]);
-    // }
     std::cout << "GPUInspector initialized, numDevices = " << deviceCount << ", sampling interval = " << sampling_interval << std::endl;
     
     return true;
@@ -209,8 +214,11 @@ GPUInfo_t GPUInspector::GetGPUInfo(unsigned int gpu_id)
 void GPUInspector::StartInspect()
 {
     CheckInit();
-    pthread_inspect_ = std::shared_ptr<std::thread>(
-        new std::thread(&GPUInspector::Run, this));
+    auto run_func = [this](int thread_id)
+    {
+        Run();
+    };
+    pthread_pool_->push(run_func);
     while(!running_inspect_)
     {
         std::this_thread::sleep_for(std::chrono::nanoseconds(5));
@@ -224,8 +232,10 @@ void GPUInspector::StopInspect()
         throw std::runtime_error("GPUInspector not started while requested to stop.");
     }
     running_inspect_ = false;
-    pthread_inspect_->join();
-    pthread_inspect_ = nullptr;
+    while(pthread_pool_->n_idle() != pthread_pool_->size())
+    {
+        std::this_thread::sleep_for(std::chrono::nanoseconds(5));
+    }
 }
 
 void GPUInspector::ExportReadings(unsigned int gpu_id, std::vector<GPUInfo_t>& readings) const
@@ -307,9 +317,10 @@ GPUInspector::GPUInspector()
 
     initialized_ = false;
     running_inspect_ = false;
-    loop_repeat_ = 100;
+    parallel_reading_ = false;
+    loop_repeat_ = 10000;
     sampling_interval_micro_second_ = 0.05 * 1000000;
-    pthread_inspect_ = nullptr;
+    pthread_pool_ = nullptr;
 
     // auto init
     Init(0.01);
@@ -334,17 +345,55 @@ void GPUInspector::Run()
     recordings_.resize(devices_.size());
     timer_.start();
     running_inspect_ = true;
+    
+    // running_logs_.clear();
+    // running_logs_.resize(devices_.size());
+
     while(running_inspect_)
     {
         Timer local_timer;
         local_timer.start();
 
         // get readings
-        for(unsigned int gpu_id = 0; gpu_id < devices_.size(); gpu_id++)
+        if(parallel_reading_)
         {
-            GPUInfo_t info = GetGPUInfo(devices_[gpu_id]);
-            info.time_stamp = timer_.getElapsedTimeInSec();
-            recordings_[gpu_id].push_back(info);
+            auto add_gpu_info = [this](int thread_id, int gpu_id, double time_stamp)
+            {
+                // timeval startTime, endTime;
+                // gettimeofday(&startTime, NULL);
+
+                GPUInfo_t info = GetGPUInfo(devices_[gpu_id]);
+                info.time_stamp = time_stamp;
+                recordings_[gpu_id].push_back(info);
+                
+                // gettimeofday(&endTime, NULL);
+                // running_logs_[gpu_id].emplace_back(thread_id, gpu_id, (startTime.tv_sec * 1000000.0) + startTime.tv_usec, (endTime.tv_sec * 1000000.0) + endTime.tv_usec);
+            };
+
+            double time_stamp = timer_.getElapsedTimeInSec();
+            for(unsigned int gpu_id = 0; gpu_id < devices_.size(); gpu_id++)
+            {
+                pthread_pool_->push(add_gpu_info, gpu_id, time_stamp);
+            }
+            while(pthread_pool_->n_idle() != pthread_pool_->size())
+            {
+                std::this_thread::sleep_for(std::chrono::nanoseconds(5));
+            }
+        }
+        else
+        {
+            for(unsigned int gpu_id = 0; gpu_id < devices_.size(); gpu_id++)
+            {
+                // timeval startTime, endTime;
+                // gettimeofday(&startTime, NULL);
+
+                GPUInfo_t info = GetGPUInfo(devices_[gpu_id]);
+                info.time_stamp = timer_.getElapsedTimeInSec();
+                recordings_[gpu_id].push_back(info);
+
+                // gettimeofday(&endTime, NULL);
+                // running_logs_[gpu_id].emplace_back(0, gpu_id, (startTime.tv_sec * 1000000.0) + startTime.tv_usec, (endTime.tv_sec * 1000000.0) + endTime.tv_usec);
+            }
         }
         
         local_timer.stop();
@@ -355,7 +404,7 @@ void GPUInspector::Run()
         }
         // else
         // {
-        //     std::cerr << "Exceeded sampling interval, time cost = " << local_timer.getElapsedTimeInSec() << std::endl;
+        //     std::cerr << "Exceeded sampling interval, time cost = " << local_timer.getElapsedTimeInMicroSec() << " micro seconds." << std::endl;
         // }
     }
     timer_.stop();

@@ -307,7 +307,7 @@ GPUInspector::GPUInspector()
 
     initialized_ = false;
     running_inspect_ = false;
-    loop_repeat_ = 100;
+    loop_repeat_ = 100000;
     sampling_interval_micro_second_ = 0.05 * 1000000;
     pthread_inspect_ = nullptr;
 
