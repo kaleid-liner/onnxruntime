@@ -123,7 +123,7 @@ def main(args):
             try:
                 isolated_graph = construct_single_node_graph(node, value_info_map, initializer_map, num_repeat)
                 isolated_model = helper.make_model(isolated_graph, producer_name = 'donglinbai')
-                model_save_path = os.path.join(model_output_dir, base_name + '_' + node.name + '.onnx')
+                model_save_path = os.path.join(model_output_dir, base_name + '_' + node.name + '_rep_' + str(num_repeat) + '.onnx')
                 onnx.save(isolated_model, model_save_path)
                 onnx.checker.check_model(model_save_path)
                 print('The model is checked!')
