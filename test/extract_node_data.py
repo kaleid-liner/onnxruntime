@@ -19,6 +19,23 @@ def path_base_name(path):
     return file_base_name(file_name)
 
 
+def find_last_record(data):
+    assert(isinstance(data, list))
+    assert(data[0]['cat'] == 'Session' and data[0]['name'] == 'model_loading_uri')
+    assert(data[1]['cat'] == 'Session' and data[1]['name'] == 'session_initialization')
+    assert(data[-1]['cat'] == 'Session' and data[-1]['name'] == 'model_run')
+    assert(data[-2]['cat'] == 'Session' and data[-2]['name'] == 'SequentialExecutor::Execute')
+
+    start = -3
+    limit = - len(data)
+    while not (data[start]['name'] == 'model_run' and data[start]['cat'] == 'Session'):
+        start -= 1
+        if start <= limit:
+            break
+    
+    return data[:2] + data[start + 1 :]
+
+
 def main(args):
 
     if args.input_path is None:
@@ -30,6 +47,9 @@ def main(args):
     with open(args.input_path) as f:
         data = json.load(f)
     
+    if args.has_warmup:
+        data = find_last_record(data)
+
     nodes = [item for item in data if item['cat'] == 'Node']
     nodes_run=[item for item in nodes if item['name'].endswith('kernel_time')]
     print('Number of Node Kernels:', len(nodes_run))
@@ -91,6 +111,7 @@ if __name__ == '__main__':
     parser.add_argument('--output-dir', type = str, default = './experiment_data/onnx_output/profile_nodes/')
     parser.add_argument('--gpu_id', type = int, default = 0)
     parser.add_argument('--enable-gpu-profile', action = 'store_true', default = False)
+    parser.add_argument('--has-warmup', action = 'store_true', default = False)
 
     args = parser.parse_args()
     print(args)

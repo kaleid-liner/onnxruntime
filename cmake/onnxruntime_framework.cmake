@@ -93,7 +93,7 @@ endif()
 
 if (onnxruntime_USE_CUDA)
   # link NVML library
-  target_link_libraries(onnxruntime_framework nvidia-ml)
+  target_link_libraries(onnxruntime_framework nvidia-ml cudart)
 endif()
 
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/../include/onnxruntime/core/framework  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/onnxruntime/core)

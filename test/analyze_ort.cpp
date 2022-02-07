@@ -93,6 +93,7 @@ int main(int argc, char** argv)
     std::string strProfileOutput = "";
     int repeat = 1;
     bool do_warming_up = false;
+    int warm_up_repeat = 1;
 
     CmdLine cmd;
     cmd.add(make_option('i', strModel, "model"));
@@ -100,6 +101,7 @@ int main(int argc, char** argv)
     cmd.add(make_option('p', strProfileOutput, "profile_output"));
     cmd.add(make_option('r', repeat, "repeat"));
     cmd.add(make_switch('w', "warmup"));
+    cmd.add(make_option('x', warm_up_repeat, "warmup_repeat"));
     cmd.process(argc, argv);
 
     if(strModel.empty())
@@ -117,6 +119,12 @@ int main(int argc, char** argv)
     if(cmd.used('w'))
     {
         do_warming_up = true;
+        std::cout << "warming up enabled." << std::endl;
+        if(warm_up_repeat <= 0)
+        {
+            std::cerr << "warm_up_repeat <= 0 (current value: " << warm_up_repeat << "), using default value 1." << std::endl;
+            warm_up_repeat = 1;
+        }
     }
 
     const OrtApi* api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
@@ -232,7 +240,7 @@ int main(int argc, char** argv)
     if(do_warming_up)
     {
         std::cout << "Warming up begin." << std::endl;
-        for(int i = 0; i < 10; i++)
+        for(int i = 0; i < warm_up_repeat; i++)
         {
             api->Run(session, NULL, input_names, ort_input_values, n_inputs, output_names, n_outputs, ort_output_values);
         }

@@ -34,16 +34,16 @@ def main(args):
 
     if args.mode == 'profile':
         profile_out = os.path.join(output_sub_dir, base_name)
-        cmd = [args.exec_path, '-i', args.model_path, '-p', profile_out]
+        cmd = [args.exec_path, '-i', args.model_path, '-p', profile_out, '-w', '-x 2']
         cmd = ' '.join(cmd)
         print('command:', cmd)
         subprocess.run(cmd, shell = True)
     else:
         gpu_reading = os.path.join(output_sub_dir, base_name + '.csv')
         logs_txt = os.path.join(output_sub_dir, base_name + '.txt')
-        profile_out = os.path.join(output_sub_dir, base_name)
+        # profile_out = os.path.join(output_sub_dir, base_name)
         cmd = [args.exec_path, '-i', args.model_path, '-g', gpu_reading, 
-                '-l', logs_txt, '-r 1000', '-p', profile_out]
+                '-l', logs_txt, '-r 1000', '-w', '-x 2']
         cmd = ' '.join(cmd)
         print('command:', cmd)
         subprocess.run(cmd, shell = True)

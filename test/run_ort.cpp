@@ -109,6 +109,8 @@ int main(int argc, char** argv)
     std::string strLogTXT = "running_logs.txt";
     std::string strProfileOutput = "";
     unsigned int nNumRepeat = 1;
+    bool do_warming_up = false;
+    int warm_up_repeat = 1;
 
     CmdLine cmd;
     cmd.add(make_option('i', strModel, "model"));
@@ -117,12 +119,25 @@ int main(int argc, char** argv)
     cmd.add(make_option('l', strLogTXT, "logs"));
     cmd.add(make_option('r', nNumRepeat, "repeat"));
     cmd.add(make_option('p', strProfileOutput, "profile_output"));
+    cmd.add(make_switch('w', "warmup"));
+    cmd.add(make_option('x', warm_up_repeat, "warmup_repeat"));
     cmd.process(argc, argv);
 
     if(strModel.empty())
     {
-        std::cout << "Input model must be specified with -i" << std::endl;
+        std::cerr << "Input model must be specified with -i" << std::endl;
         return EXIT_FAILURE;
+    }
+
+    if(cmd.used('w'))
+    {
+        do_warming_up = true;
+        std::cout << "warming up enabled." << std::endl;
+        if(warm_up_repeat <= 0)
+        {
+            std::cerr << "warm_up_repeat <= 0 (current value: " << warm_up_repeat << "), using default value 1." << std::endl;
+            warm_up_repeat = 1;
+        }
     }
 
     const OrtApi* api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
@@ -135,7 +150,7 @@ int main(int argc, char** argv)
 
     // create environment
     OrtEnv *env;
-    api->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "analyze_ort", &env);
+    api->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "run_ort", &env);
     assert(env != NULL);
 
     // create session options
@@ -243,10 +258,21 @@ int main(int argc, char** argv)
         api->ReleaseTypeInfo(type_info);
     }
 
+    // warming up
+    if(do_warming_up)
+    {
+        std::cout << "Warming up begin." << std::endl;
+        for(int i = 0; i < warm_up_repeat; i++)
+        {
+            api->Run(session, NULL, input_names, ort_input_values, n_inputs, output_names, n_outputs, ort_output_values);
+        }
+        std::cout << "Warming up finished." << std::endl;
+    }
+
     // run inference
     unsigned int repeat = gpu_ins.GetLoopRepeat();
     std::vector<double> start_cost, stop_cost;
-    for(int i = 0; i < 20; i++)
+    for(int i = 0; i < 1; i++)
     {
         {
             onnxruntime::profiling::Timer timer;
@@ -254,28 +280,28 @@ int main(int argc, char** argv)
             gpu_ins.StartInspect();
             timer.stop();
             start_cost.push_back(timer.getElapsedTimeInMicroSec());
-            std::cout << "Start GPUInspect cost " << timer.getElapsedTimeInMicroSec() << " micro second." << std::endl;
         }
+
         std::cout << "Run begin." << std::endl;
         for(unsigned int i = 0; i < repeat; i++)
         {
             api->Run(session, NULL, input_names, ort_input_values, n_inputs, output_names, n_outputs, ort_output_values);
         }
         std::cout << "Run finished." << std::endl;
+
         {
             onnxruntime::profiling::Timer timer;
             timer.start();
             gpu_ins.StopInspect();
             timer.stop();
             stop_cost.push_back(timer.getElapsedTimeInMicroSec());
-            std::cout << "Stop GPUInspect cost " << timer.getElapsedTimeInMicroSec() << " micro second." << std::endl;
         }
     }
 
     // cost stats
     assert(start_cost.size() == stop_cost.size());
     double sum_start = 0, sum_stop = 0;
-    std::cout << "timing stats:\nstart  stop" << std::endl;
+    std::cout << "timing stats (microseconds):\nstart  stop" << std::endl;
     for(int i = 0; i < start_cost.size(); i++)
     {
         std::cout << start_cost[i] << "  " << stop_cost[i] << std::endl;
@@ -306,7 +332,7 @@ int main(int argc, char** argv)
 
     // export latency and energy
     std::ofstream f_log(strLogTXT);
-    f_log << "#model, repeat, latency, energy" << std::endl;
+    f_log << "#model,repeat,latency,energy" << std::endl;
     f_log << std::fixed;
     f_log << strModel << "," << repeat << "," << gpu_ins.GetDurationInSec();
     for(double item : energies)
@@ -318,7 +344,7 @@ int main(int argc, char** argv)
 
     // export GPU readings
     std::ofstream f_gpu(strGPUReadingCSV);
-    f_gpu << "#gpu_id, timestamp, used_memory, power, temperature, memory_util, gpu_util" << std::endl;
+    f_gpu << "gpu_id,timestamp,used_memory,power,temperature,memory_util,gpu_util" << std::endl;
     f_gpu << std::fixed;
     for(unsigned int gpu_id = 0; gpu_id < gpu_ins.NumDevices(); gpu_id++)
     {

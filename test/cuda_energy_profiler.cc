@@ -128,6 +128,7 @@ double Timer::getElapsedTime()
 
 #include <stdexcept>
 #include <iostream>
+#include <cuda_runtime.h>
 
 namespace onnxruntime {
 
@@ -215,10 +216,12 @@ void GPUInspector::StartInspect()
     {
         std::this_thread::sleep_for(std::chrono::nanoseconds(5));
     }
+    cudaDeviceSynchronize();
 }
 
 void GPUInspector::StopInspect()
 {
+    cudaDeviceSynchronize();
     if(!running_inspect_)
     {
         throw std::runtime_error("GPUInspector not started while requested to stop.");
@@ -307,7 +310,7 @@ GPUInspector::GPUInspector()
 
     initialized_ = false;
     running_inspect_ = false;
-    loop_repeat_ = 100000;
+    loop_repeat_ = 10000;
     sampling_interval_micro_second_ = 0.05 * 1000000;
     pthread_inspect_ = nullptr;
 

@@ -10,7 +10,7 @@ set(CMAKE_BUILD_TYPE Release)
 add_compile_definitions(USE_CUDA)
 
 add_library(cuda_energy_profiler cuda_energy_profiler.cc)
-target_link_libraries(cuda_energy_profiler nvidia-ml pthread)
+target_link_libraries(cuda_energy_profiler nvidia-ml pthread cudart)
 
 # set(ONNXRUNTIME_ROOTDIR "/home/t-chengluo/donglinb/Projects/onnx_all/onnxruntime/build/Linux/install")
 set(ONNXRUNTIME_ROOTDIR "/home/t-chengluo/donglinb/Projects/onnxruntime/build/Linux/install")

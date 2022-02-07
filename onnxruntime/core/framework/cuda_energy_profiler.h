@@ -76,6 +76,11 @@ private:
 #include <memory>
 #include <nvml.h>
 
+namespace ctpl
+{
+  class thread_pool;
+}
+
 namespace onnxruntime {
 
 namespace profiling {
@@ -107,7 +112,7 @@ class GPUInspector
 
   ~GPUInspector();
   static GPUInspector& Instance();
-  bool Init(double sampling_interval = 0.05);
+  bool Init(double sampling_interval = 0.05, bool parallel_reading = false);
   static GPUInfo_t GetGPUInfo(const nvmlDevice_t& device);
   GPUInfo_t GetGPUInfo(unsigned int gpu_id);
   void StartInspect();
@@ -130,13 +135,28 @@ class GPUInspector
 
   bool initialized_{false};
   bool running_inspect_{false};
+  bool parallel_reading_{false};
   unsigned int loop_repeat_{1};
   double sampling_interval_micro_second_{0.05 * 1000000};
-  std::shared_ptr<std::thread> pthread_inspect_{nullptr};
+  std::unique_ptr<ctpl::thread_pool> pthread_pool_{nullptr};
 
   std::vector<nvmlDevice_t> devices_;
   Timer timer_;
   std::vector<std::vector<GPUInfo_t>> recordings_;
+
+//   // for debugging
+//  public:
+//   struct Log_t
+//   {
+//     int thread_id;
+//     int gpu_id;
+//     double start_time;
+//     double end_time;
+//     Log_t() : thread_id(0), gpu_id(0), start_time(0), end_time(0) {}
+//     Log_t(int thread_id, int gpu_id, double start_time, double end_time) : 
+//         thread_id(thread_id), gpu_id(gpu_id), start_time(start_time), end_time(end_time) {}
+//   };
+//   std::vector<std::vector<Log_t>> running_logs_;
 };
 
 using GPUInfo_t = GPUInspector::GPUInfo_t;
