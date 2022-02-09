@@ -59,7 +59,7 @@ def duplicate_node(node : NodeProto, num_repeat : int, subgraph_initializer, sub
     return node_list, subgraph_initializer_dup, subgraph_output_dup
 
 
-def construct_single_node_graph(node : NodeProto, value_info_map : Dict[str, ValueInfoProto], initializer_map : Dict[str, TensorProto], num_repeat : int = 1):
+def construct_single_node_graph(node : NodeProto, value_info_map : Dict[str, ValueInfoProto], initializer_map : Dict[str, TensorProto], num_repeat : int = 1, duplicate_weights : bool = True):
     # extract input/output info
     subgraph_initializer = []
     subgraph_input = []
@@ -76,10 +76,30 @@ def construct_single_node_graph(node : NodeProto, value_info_map : Dict[str, Val
         subgraph_output.append(value_info_map[i])
     # construct graph
     if num_repeat <= 1:
+        # single node
         isolated_graph = helper.make_graph([node], node.name + '_isolated', subgraph_input, subgraph_output, subgraph_initializer)
-    else:
+    elif duplicate_weights:
+        # duplicate weights as well as nodes, nodes share only inputs, but each node has it's own weights and outputs
         node_list, subgraph_initializer_dup, subgraph_output_dup = duplicate_node(node, num_repeat, subgraph_initializer, subgraph_output)
         isolated_graph = helper.make_graph(node_list, node.name + '_isolated', subgraph_input, subgraph_output_dup, subgraph_initializer_dup)
+    else:
+        # duplicate nodes only, each node has exactly the same inputs and weights,but different output
+        node_list = []
+        subgraph_output_dup = []
+        for i in range(num_repeat):
+            i_str = '_' + str(i)
+            # duplicate output
+            node_output = []
+            for item in node.output:
+                node_output.append(item + i_str)
+            for item in subgraph_output:
+                item_i = copy.deepcopy(item)
+                item_i.name += i_str
+                subgraph_output_dup.append(item_i)
+            node_i = helper.make_node(node.op_type, node.input, node_output, node.name + i_str)
+            node_i.attribute.extend(node.attribute)
+            node_list.append(node_i)
+        isolated_graph = helper.make_graph(node_list, node.name + '_isolated', subgraph_input, subgraph_output_dup, subgraph_initializer)
     return isolated_graph
 
 
@@ -116,12 +136,13 @@ def main(args):
     print(sorted(initializer_map.keys()))
 
     # process nodes
+    duplicate_weights = not args.use_shared_weights
     for node in graph.node:
         print('processing node', node.name)
         num_repeat = args.parallel_nodes
         while num_repeat >= 1:
             try:
-                isolated_graph = construct_single_node_graph(node, value_info_map, initializer_map, num_repeat)
+                isolated_graph = construct_single_node_graph(node, value_info_map, initializer_map, num_repeat, duplicate_weights)
                 isolated_model = helper.make_model(isolated_graph, producer_name = 'donglinbai')
                 model_save_path = os.path.join(model_output_dir, base_name + '_' + node.name + '_rep_' + str(num_repeat) + '.onnx')
                 onnx.save(isolated_model, model_save_path)
@@ -138,6 +159,7 @@ if __name__ == '__main__':
     parser.add_argument('model', type = str)
     parser.add_argument('--output-dir', type = str, default = './experiment_data/output_models/')
     parser.add_argument('--parallel-nodes', type = int, default = 1)
+    parser.add_argument('--use-shared-weights', action = 'store_true', default = False)
     args = parser.parse_args()
     print(args)
     main(args)
