@@ -71,6 +71,4 @@ onnxruntime/core/providers/op_kernel_type_control_overrides_reduced_types.inc
 test/experiment_data/
 test/test/
 test/cudnn_kernel_test/
-test/cudnn_kernel_test/build/
-test/cudnn_kernel_test/outputs/
 install/
