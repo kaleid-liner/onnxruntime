@@ -1,6 +1,8 @@
 import os
 import argparse
 import pickle
+import json
+from textwrap import indent
 from typing import Dict
 import numpy as np
 import onnx
@@ -114,6 +116,41 @@ def reduce_list(x):
     return reduce(lambda a, b : a + b, x)
 
 
+def extract_MKN(gemm_item):
+    input_list = gemm_item['input']
+    output_list = gemm_item['output']
+    attribute = gemm_item['attribute']
+    # param check
+    if len(input_list) != 3:
+        return None
+    if len(input_list[0]) != 2 or len(input_list[1]) != 2 or len(input_list[2]) != 1:
+        return None
+    if len(output_list) != 1 or len(output_list[0]) != 2:
+        return None
+    # process
+    M, K1 = 0, 0
+    if attribute['transA']:
+        K1, M = input_list[0]
+    else:
+        M, K1 = input_list[0]
+    K2, N = 0, 0
+    if attribute['transB']:
+        N, K2 = input_list[1]
+    else:
+        K2, N = input_list[1]
+    if K1 != K2 or N != input_list[2][0]:
+        print('Error: incompatible dimentions in Gemm.')
+        return None
+    if M != output_list[0][0] or N != output_list[0][1]:
+        print('Warning: error output shape.')
+    return (M, K1, N)
+
+
+def post_process_gemm_infos(gemm_infos):
+    for item in gemm_infos:
+        item['MKN'] = extract_MKN(item)
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser('Collect Gemm Kernel infos from ONNX models.')
@@ -146,10 +183,11 @@ if __name__ == '__main__':
     merge_gemm_infos = True
     if merge_gemm_infos:
         gemm_infos = reduce_list(gemm_infos)
+        post_process_gemm_infos(gemm_infos)
 
     os.makedirs(args.output_dir, exist_ok = True)
-    save_path = os.path.join(args.output_dir, 'onnx_model_gemm_infos.bin')
-    with open(save_path, 'wb') as f:
-        pickle.dump(gemm_infos, f)
+    save_path = os.path.join(args.output_dir, 'onnx_model_gemm_infos.json')
+    with open(save_path, 'w') as f:
+        json.dump(gemm_infos, f, indent = 4)
     print('gemm info saved to file:', save_path)
     print(gemm_infos)

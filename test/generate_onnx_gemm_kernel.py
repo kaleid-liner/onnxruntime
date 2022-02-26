@@ -1,6 +1,8 @@
 import os
 import sys
+import json
 import argparse
+from typing import Dict
 
 import numpy as np
 import onnx
@@ -11,7 +13,7 @@ from onnx import AttributeProto, TensorProto, GraphProto, NodeProto, ValueInfoPr
 # Compute Y = alpha * A' * B' + beta * C
 # A' = transpose(A) if transA else A
 # B' = transpose(B) if transB else B
-def construct_model(args):
+def construct_model(cfg : Dict[str, int]):
     # make node
     op_type = 'Gemm'
     node_input = ['A', 'B', 'C']
@@ -26,9 +28,9 @@ def construct_model(args):
     node = helper.make_node(op_type, node_input, node_output, node_name, **attribute)
 
     # prepare input/output
-    M = args.M
-    K = args.K
-    N = args.N
+    M = cfg['M']
+    K = cfg['K']
+    N = cfg['N']
     A = helper.make_tensor_value_info('A', TensorProto.FLOAT, (M, K))
     B = helper.make_tensor_value_info('B', TensorProto.FLOAT, (K, N))
     C = helper.make_tensor_value_info('C', TensorProto.FLOAT, (M, N))
@@ -47,11 +49,29 @@ def construct_model(args):
 
 
 def main(args):
-    model = construct_model(args)
-    # check and save
-    model_save_path = args.save_path
-    onnx.save(model, model_save_path)
-    onnx.checker.check_model(model_save_path)
+    os.makedirs(args.save_dir, exist_ok = True)
+    # if config file is specified, read MNK from file (higher priority)
+    # config file must be a list of dict with keys (M, K, N), and saved in json format
+    if args.config_file:
+        with open(args.config_file) as f:
+            configs = json.load(f)
+        print('loaded configs from file, number of configs:', len(configs))
+    else:
+        print('using specified single config.')
+        configs = [{
+            'M' : args.M,
+            'K' : args.K,
+            'N' : args.N,
+        }]
+    # construct models
+    for cfg in configs:
+        try:
+            model = construct_model(cfg) 
+            model_save_path = os.path.join(args.save_dir, 'onnx_gemm_{}_{}_{}.onnx'.format(cfg['M'], cfg['K'], cfg['N']))
+            onnx.save(model, model_save_path)
+            onnx.checker.check_model(model_save_path)
+        except Exception as e:
+            print('Error:', e)
 
 
 if __name__ == '__main__':
@@ -61,8 +81,9 @@ if __name__ == '__main__':
     parser.add_argument('--M', type = int, default = 1)
     parser.add_argument('--K', type = int, default = 512)
     parser.add_argument('--N', type = int, default = 1000)
+    parser.add_argument('--config-file', type = str, default = None)
     # save path
-    parser.add_argument('--save_path', type = str, default = './model.onnx')
+    parser.add_argument('--save-dir', type = str, default = './experiment_data/gemm_kernels/')
 
     args = parser.parse_args()
     print(args)
