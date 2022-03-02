@@ -43,7 +43,7 @@ def main(args):
         logs_txt = os.path.join(output_sub_dir, base_name + '.txt')
         # profile_out = os.path.join(output_sub_dir, base_name)
         cmd = [args.exec_path, '-i', args.model_path, '-g', gpu_reading, 
-                '-l', logs_txt, '-r 1000', '-w', '-x 2']
+                '-l', logs_txt, '-r 10000', '-w', '-x 2']
         cmd = ' '.join(cmd)
         print('command:', cmd)
         subprocess.run(cmd, shell = True)
