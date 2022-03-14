@@ -52,20 +52,24 @@ def extract_node_input_output_shapes(node : NodeProto, value_info_map : Dict[str
     return input_shapes, output_shapes
 
 
-def extract_gemm_attribute(node : NodeProto):
-    assert(node.op_type == 'Gemm')
+def extract_conv_attribute(node : NodeProto):
+    assert(node.op_type == 'Conv')
     attributes = node.attribute
     attribute_dict = {
-        'alpha' : 1.0,
-        'beta' : 1.0,
-        'transA' : 0,
-        'transB' : 0,
+        'auto_pad' : 'NOTSET',
+        'dilations' : [1, 1],
+        'group' : 1,
+        'kernel_shape' : [3, 3],
+        'pads' : [1, 1, 1, 1],
+        'strides' : [1, 1],
     }
     for attr in attributes:
-        if attr.name in ['alpha', 'beta']:
-            attribute_dict[attr.name] = attr.f
-        elif attr.name in ['transA', 'transB']:
+        if attr.name in ['dilations', 'kernel_shape', 'pads', 'strides']:
+            attribute_dict[attr.name] = list(attr.ints)
+        elif attr.name == 'group':
             attribute_dict[attr.name] = attr.i
+        elif attr.name == 'auto_pad':
+            attribute_dict[attr.name] = attr.s
         else:
             print('Warning: unrecognized attribute name:', attr.name)
     return attribute_dict
@@ -96,19 +100,19 @@ def main(args):
         initializer_map[init.name] = init
     # print(sorted(initializer_map.keys()))
 
-    gemm_nodes = [node for node in graph.node if node.op_type == 'Gemm']
-    gemm_infos = []
-    for node in gemm_nodes:
+    conv_nodes = [node for node in graph.node if node.op_type == 'Conv']
+    conv_infos = []
+    for node in conv_nodes:
         input_shape, output_shape = extract_node_input_output_shapes(node, value_info_map, initializer_map)
-        attribute = extract_gemm_attribute(node)
-        gemm_infos.append({
+        attribute = extract_conv_attribute(node)
+        conv_infos.append({
             'model' : base_name,
             'node' : node.name,
             'input' : input_shape,
             'output' : output_shape,
             'attribute' : attribute,
         })
-    return gemm_infos
+    return conv_infos
 
 
 def reduce_list(x):
@@ -116,78 +120,42 @@ def reduce_list(x):
     return reduce(lambda a, b : a + b, x)
 
 
-def extract_MKN(gemm_item):
-    input_list = gemm_item['input']
-    output_list = gemm_item['output']
-    attribute = gemm_item['attribute']
-    # param check
-    if len(input_list) != 3:
-        return None
-    if len(input_list[0]) != 2 or len(input_list[1]) != 2 or len(input_list[2]) != 1:
-        return None
-    if len(output_list) != 1 or len(output_list[0]) != 2:
-        return None
-    # process
-    M, K1 = 0, 0
-    if attribute['transA']:
-        K1, M = input_list[0]
-    else:
-        M, K1 = input_list[0]
-    K2, N = 0, 0
-    if attribute['transB']:
-        N, K2 = input_list[1]
-    else:
-        K2, N = input_list[1]
-    if K1 != K2 or N != input_list[2][0]:
-        print('Error: incompatible dimentions in Gemm.')
-        return None
-    if M != output_list[0][0] or N != output_list[0][1]:
-        print('Warning: error output shape.')
-    return (M, K1, N)
-
-
-def post_process_gemm_infos(gemm_infos):
-    for item in gemm_infos:
-        item['MKN'] = extract_MKN(item)
-
-
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser('Collect Gemm Kernel infos from ONNX models.')
+    parser = argparse.ArgumentParser('Collect Conv Kernel infos from ONNX models.')
     parser.add_argument('--model', type = str, default = None)
     parser.add_argument('--model-dir', type = str, default = None)
-    parser.add_argument('--output-dir', type = str, default = './experiment_data/gemm_kernel_infos/')
+    parser.add_argument('--output-dir', type = str, default = './experiment_data/conv_kernel_infos/')
     args = parser.parse_args()
     print(args)
 
-    gemm_infos = []
+    conv_infos = []
 
     if args.model:
-        print('extracting Gemm info from model:', args.model)
+        print('extracting Conv info from model:', args.model)
         info = main(args)
-        gemm_infos.append(info)
+        conv_infos.append(info)
     elif args.model_dir:
         model_list = os.listdir(args.model_dir)
         model_list = [i for i in model_list if i.split('.')[-1] == 'onnx']
         for model in model_list:
             args.model = os.path.join(args.model_dir, model)
-            print('extracting Gemm info from model:', args.model)
+            print('extracting Conv info from model:', args.model)
             try:
                 info = main(args)
-                gemm_infos.append(info)
+                conv_infos.append(info)
             except Exception as e:
                 print('Error:', e)
     else:
         print('Error: either model or model-dir must be specified.')
     
-    merge_gemm_infos = True
-    if merge_gemm_infos:
-        gemm_infos = reduce_list(gemm_infos)
-        post_process_gemm_infos(gemm_infos)
+    merge_conv_infos = True
+    if merge_conv_infos:
+        conv_infos = reduce_list(conv_infos)
 
     os.makedirs(args.output_dir, exist_ok = True)
-    save_path = os.path.join(args.output_dir, 'onnx_model_gemm_infos.json')
+    save_path = os.path.join(args.output_dir, 'onnx_model_conv_infos.json')
     with open(save_path, 'w') as f:
-        json.dump(gemm_infos, f, indent = 4)
-    print('gemm info saved to file:', save_path)
-    print(gemm_infos)
+        json.dump(conv_infos, f, indent = 4)
+    print('conv info saved to file:', save_path)
+    print(conv_infos)

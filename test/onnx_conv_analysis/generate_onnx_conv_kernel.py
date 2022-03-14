@@ -1,3 +1,4 @@
+from email.policy import default
 from fileinput import filename
 import os
 import sys
@@ -34,7 +35,7 @@ def make_input_shape(cfg):
 
 
 def make_weight_shapes(cfg):
-    shape_w = [cfg['output_channels'], cfg['input_channels']] + cfg['kernel_shape']
+    shape_w = [cfg['output_channels'], cfg['kernel_channels']] + cfg['kernel_shape']
     shape_b = [cfg['output_channels']]
     return shape_w, shape_b
 
@@ -56,7 +57,7 @@ def calculate_output_shape(cfg):
 def construct_model(cfg):
     # make node
     op_type = 'Conv'
-    node_input = ['X', 'W', 'B']
+    node_input = ['X', 'W', 'B'] if cfg['has_bias'] else ['X', 'W']
     node_output = ['Y']
     node_name = 'conv_node'
     attribute = make_attribute_dict(cfg)
@@ -68,25 +69,31 @@ def construct_model(cfg):
     output_shape = calculate_output_shape(cfg)
 
     X = helper.make_tensor_value_info('X', TensorProto.FLOAT, input_shape)
-    W = np.random.randn(*shape_w).astype(np.float32)
-    B = np.random.randn(*shape_b).astype(np.float32)
+    W = helper.make_tensor_value_info('W', TensorProto.FLOAT, shape_w)
+    # W = np.random.randn(*shape_w).astype(np.float32)
+    # W_tensor = numpy_helper.from_array(W, 'W')
+    if cfg['has_bias']:
+        B = helper.make_tensor_value_info('B', TensorProto.FLOAT, shape_b)
+        # B = np.random.randn(*shape_b).astype(np.float32)
+        # B_tensor = numpy_helper.from_array(B, 'B')
     Y = helper.make_tensor_value_info('Y', TensorProto.FLOAT, output_shape)
-    W_tensor = numpy_helper.from_array(W, 'W')
-    B_tensor = numpy_helper.from_array(B, 'B')
 
     # make graph
-    graph_inputs = [X]
+    graph_inputs = [X, W, B] if cfg['has_bias'] else [X, W]
+    # graph_inputs = [X]
     graph_outputs = [Y]
-    graph_initializers = [W_tensor, B_tensor]
-    graph = helper.make_graph([node], 'graph with single conv node.', graph_inputs, graph_outputs, graph_initializers)
+    graph = helper.make_graph([node], 'graph with single conv node.', graph_inputs, graph_outputs)
+    # graph_initializers = [W_tensor, B_tensor] if cfg['has_bias'] else [W_tensor]
+    # graph = helper.make_graph([node], 'graph with single conv node.', graph_inputs, graph_outputs, graph_initializers)
 
     # make model
     model = helper.make_model(graph)
 
-    print('input_shape:', input_shape)
-    print('shape_w:', shape_w)
-    print('shape_b:', shape_b)
-    print('output_shape:', output_shape)
+    # print('input_shape:', input_shape)
+    # print('shape_w:', shape_w)
+    # print('shape_b:', shape_b)
+    # print('output_shape:', output_shape)
+    # print('has_bias:', cfg['has_bias'])
 
     return model
 
@@ -96,9 +103,9 @@ def make_model_save_name(cfg):
     # input shape NCHW
     save_name += '_in_{}_{}_{}_{}'.format(cfg['batch_size'], cfg['input_channels'], cfg['image_shape'][0], cfg['image_shape'][1])
     # kernel shape NHW
-    save_name += '_kernel_{}_{}_{}'.format(cfg['output_channels'], cfg['kernel_shape'][0], cfg['kernel_shape'][1])
+    save_name += '_kernel_{}_{}_{}_{}'.format(cfg['output_channels'], cfg['kernel_channels'], cfg['kernel_shape'][0], cfg['kernel_shape'][1])
     # attributes (assume isotropic)
-    save_name += '_attr_{}_{}_{}'.format(cfg['pads'][0], cfg['dilations'][0], cfg['strides'][0])
+    save_name += '_attr_{}_{}_{}_{}_{}_{}_{}_{}'.format(cfg['pads'][0], cfg['pads'][1], cfg['dilations'][0], cfg['dilations'][1], cfg['strides'][0], cfg['strides'][1], cfg['group'], int(cfg['has_bias']))
     # finished
     save_name += '.onnx'
     return save_name
@@ -116,15 +123,23 @@ def main(args):
         print('using specified single config.')
         configs = [args.__dict__]
     # construct models
+    count = 0
+    model_names = []
     for cfg in configs:
+        count += 1
+        print('generate {}/{} kernels.'.format(count, len(configs)))
         try:
             model = construct_model(cfg)
             model_save_name = make_model_save_name(cfg)
             model_save_path = os.path.join(args.save_dir, model_save_name)
             onnx.save(model, model_save_path)
             onnx.checker.check_model(model_save_path)
+            model_names.append(model_save_name)
         except Exception as e:
             print('Error:', e)
+    
+    print('total models:', len(model_names))
+    print('remove repeat:', len(set(model_names)))
 
 
 if __name__ == '__main__':
@@ -133,6 +148,7 @@ if __name__ == '__main__':
     # config
     parser.add_argument('--image-shape', type = int, nargs = 2, default = [224, 224])
     parser.add_argument('--input-channels', type = int, default = 3)
+    parser.add_argument('--kernel-channels', type = int, default = 3)  # input-channels = kernel-channels * group
     parser.add_argument('--output-channels', type = int, default = 32)
     parser.add_argument('--batch-size', type = int, default = 1)
     parser.add_argument('--kernel-shape', type = int, nargs = 2, default = [7, 7])
@@ -140,6 +156,7 @@ if __name__ == '__main__':
     parser.add_argument('--dilations', type = int, nargs = 2, default = [1, 1])
     parser.add_argument('--strides', type = int, nargs = 2, default = [2, 2])
     parser.add_argument('--group', type = int, default = 1)
+    parser.add_argument('--has-bias', action = 'store_true', default = False)
     parser.add_argument('--config-file', type = str, default = None)
     # save path
     parser.add_argument('--save-dir', type = str, default = './experiment_data/conv_kernels/')

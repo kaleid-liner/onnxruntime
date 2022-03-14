@@ -18,35 +18,25 @@ def path_base_name(path):
     return file_base_name(file_name)
 
 
-def main(args):
+def run_onnx_model(exec_path : str, model_path : str):
+    import re
+    pattern = re.compile(r'#latency:([0-9]+[\.]?[0-9]*),energy:([0-9]+[\.]?[0-9]*)')
+    cmd = [exec_path, '-i', model_path, '-r 10000', '-w', '-x 2', '-t 10.0']
+    cmd = ' '.join(cmd)
+    ret = subprocess.run(cmd, shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+    ret = str(ret.stdout)
+    res = pattern.findall(ret)[0]
+    return {'latency' : res[0], 'energy' : res[1]}
 
+
+def main(args):
     os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-    
     if args.exec_path is None or not os.path.exists(args.exec_path):
         print('Error: executable is not specified or does not exist.')
         sys.exit(-1)
-    
-    os.makedirs(args.output_dir, exist_ok = True)
-    output_sub_dir = os.path.join(args.output_dir, args.mode)
-    os.makedirs(output_sub_dir, exist_ok = True)
-
-    base_name = path_base_name(args.model_path)
-
-    if args.mode == 'profile':
-        profile_out = os.path.join(output_sub_dir, base_name)
-        cmd = [args.exec_path, '-i', args.model_path, '-p', profile_out, '-w', '-x 2']
-        cmd = ' '.join(cmd)
-        print('command:', cmd)
-        subprocess.run(cmd, shell = True)
-    else:
-        gpu_reading = os.path.join(output_sub_dir, base_name + '.csv')
-        logs_txt = os.path.join(output_sub_dir, base_name + '.txt')
-        # profile_out = os.path.join(output_sub_dir, base_name)
-        cmd = [args.exec_path, '-i', args.model_path, '-g', gpu_reading, 
-                '-l', logs_txt, '-r 10000', '-w', '-x 2']
-        cmd = ' '.join(cmd)
-        print('command:', cmd)
-        subprocess.run(cmd, shell = True)
+    res = run_onnx_model(args.exec_path, args.model_path)
+    print(res)
+    return res
 
 
 if __name__ == '__main__':
@@ -54,12 +44,19 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('Run ONNX Runtime with Onnx Models.')
     parser.add_argument('--model-path', type = str, default = None)
     parser.add_argument('--model-dir', type = str, default = None)
-    parser.add_argument('--output-dir', type = str, default = './experiment_data/onnx_output')
-    parser.add_argument('--mode', type = str, default = 'run', choices = ['run', 'profile'])
-    parser.add_argument('--exec-path', type = str, default = None)
+    parser.add_argument('--exec-path', type = str, default = './build/run_ort_clean')
+    parser.add_argument('--build', action = 'store_true', default = False)
+    parser.add_argument('--project-dir', type = str, default = './')
 
     args = parser.parse_args()
     print(args)
+    
+    if args.build:
+        build_dir = os.path.join(args.project_dir, 'build')
+        os.makedirs(build_dir, exist_ok = True)
+        cmd = 'cd {} && cmake .. && make -j'.format(build_dir)
+        subprocess.run(cmd, shell = True)
+        args.exec_path = os.path.join(build_dir, 'run_ort_clean')
 
     if args.model_path:
         main(args)

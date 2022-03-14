@@ -72,14 +72,10 @@ private:
 
 
 #include <vector>
+#include <unordered_map>
 #include <thread>
 #include <memory>
 #include <nvml.h>
-
-namespace ctpl
-{
-  class thread_pool;
-}
 
 namespace onnxruntime {
 
@@ -112,14 +108,16 @@ class GPUInspector
 
   ~GPUInspector();
   static GPUInspector& Instance();
-  bool Init(double sampling_interval = 0.05, bool parallel_reading = false);
+  bool Init(int gpu_id = -1, double sampling_interval = 0.05);
   static GPUInfo_t GetGPUInfo(const nvmlDevice_t& device);
   GPUInfo_t GetGPUInfo(unsigned int gpu_id);
   void StartInspect();
   void StopInspect();
   void ExportReadings(unsigned int gpu_id, std::vector<GPUInfo_t>& readings) const;
-  void ExportAllReadings(std::vector<std::vector<GPUInfo_t>>& all_readings) const;
+  void ExportAllReadings(std::unordered_map<int, std::vector<GPUInfo_t>>& all_readings) const;
   unsigned int NumDevices() const;
+  unsigned int NumInspectedDevices() const;
+  void InspectedDeviceIds(std::vector<unsigned int>& device_ids) const;
   static double CalculateEnergy(const std::vector<GPUInfo_t>& readings);
   double CalculateEnergy(unsigned int gpu_id) const;
   void CalculateEnergy(std::vector<double>& energies) const;
@@ -129,34 +127,21 @@ class GPUInspector
 
  private:
   DISALLOW_COPY_ASSIGNMENT_AND_MOVE(GPUInspector);
-  GPUInspector();
+  GPUInspector(bool auto_init = true);
   inline void CheckInit() const;
   void Run();
 
   bool initialized_{false};
   bool running_inspect_{false};
-  bool parallel_reading_{false};
   unsigned int loop_repeat_{1};
   double sampling_interval_micro_second_{0.05 * 1000000};
-  std::unique_ptr<ctpl::thread_pool> pthread_pool_{nullptr};
+  std::shared_ptr<std::thread> pthread_inspect_{nullptr};
 
-  std::vector<nvmlDevice_t> devices_;
+  // std::vector<nvmlDevice_t> devices_;
+  std::unordered_map<int, nvmlDevice_t> devices_;
   Timer timer_;
-  std::vector<std::vector<GPUInfo_t>> recordings_;
-
-//   // for debugging
-//  public:
-//   struct Log_t
-//   {
-//     int thread_id;
-//     int gpu_id;
-//     double start_time;
-//     double end_time;
-//     Log_t() : thread_id(0), gpu_id(0), start_time(0), end_time(0) {}
-//     Log_t(int thread_id, int gpu_id, double start_time, double end_time) : 
-//         thread_id(thread_id), gpu_id(gpu_id), start_time(start_time), end_time(end_time) {}
-//   };
-//   std::vector<std::vector<Log_t>> running_logs_;
+  // std::vector<std::vector<GPUInfo_t>> recordings_;
+  std::unordered_map<int, std::vector<GPUInfo_t>> recordings_;
 };
 
 using GPUInfo_t = GPUInspector::GPUInfo_t;

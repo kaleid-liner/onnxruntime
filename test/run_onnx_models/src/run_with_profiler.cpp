@@ -4,9 +4,10 @@
 #include <fstream>
 #include <memory>
 #include <cassert>
+#include <limits>
 
 #include <onnxruntime_c_api.h>
-#include "cuda_energy_profiler.h"
+#include <cuda_energy_profiler.h>
 #include "cmdLine.h"
 
 #define PrintVar(x) (std::cout << #x << " = " << x << std::endl)
@@ -111,6 +112,8 @@ int main(int argc, char** argv)
     unsigned int nNumRepeat = 1;
     bool do_warming_up = false;
     int warm_up_repeat = 1;
+    double time_limit = std::numeric_limits<double>::max();
+    int gpu_id = 0;
 
     CmdLine cmd;
     cmd.add(make_option('i', strModel, "model"));
@@ -121,6 +124,8 @@ int main(int argc, char** argv)
     cmd.add(make_option('p', strProfileOutput, "profile_output"));
     cmd.add(make_switch('w', "warmup"));
     cmd.add(make_option('x', warm_up_repeat, "warmup_repeat"));
+    cmd.add(make_option('t', time_limit, "time_limit"));
+    cmd.add(make_option('d', gpu_id, "gpu_id"));
     cmd.process(argc, argv);
 
     if(strModel.empty())
@@ -145,7 +150,12 @@ int main(int argc, char** argv)
 
     std::cout << "Get GPUInspector Instance." << std::endl;
     GPUInspector& gpu_ins = GPUInspector::Instance();
-    gpu_ins.Init(0.01);
+    bool success = gpu_ins.Init(gpu_id, 0.01);
+    if(!success)
+    {
+        std::cout << "Initialize GPUInspector failed." << std::endl;
+        return EXIT_FAILURE;
+    }
     gpu_ins.SetLoopRepeat(nNumRepeat);
 
     // create environment
@@ -177,6 +187,7 @@ int main(int argc, char** argv)
         memset(&o, 0, sizeof(o));
         // But is zero a valid value for every variable? Not quite. It is not guaranteed. In the other words: does every enum
         // type contain zero? The following line can be omitted because EXHAUSTIVE is mapped to zero in onnxruntime_c_api.h.
+        o.device_id = 0;
         o.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchExhaustive;
         o.gpu_mem_limit = SIZE_MAX;
         OrtStatus* onnx_status = api->SessionOptionsAppendExecutionProvider_CUDA(session_options, &o);
@@ -283,10 +294,20 @@ int main(int argc, char** argv)
         }
 
         std::cout << "Run begin." << std::endl;
+        onnxruntime::profiling::Timer run_timer;
+        run_timer.start();
         for(unsigned int i = 0; i < repeat; i++)
         {
             api->Run(session, NULL, input_names, ort_input_values, n_inputs, output_names, n_outputs, ort_output_values);
+            double time_elapsed = run_timer.getElapsedTimeInSec();
+            if(time_elapsed >= time_limit)
+            {
+                std::cout << "early stop due to exceeding time limit, actual repeat times: " << i + 1 << std::endl;
+                gpu_ins.SetLoopRepeat(i + 1);
+                repeat = i + 1;
+            }
         }
+        run_timer.stop();
         std::cout << "Run finished." << std::endl;
 
         {
@@ -317,6 +338,7 @@ int main(int argc, char** argv)
 
     // display log info
     std::cout << "NumDevices = " << gpu_ins.NumDevices() << std::endl;
+    std::cout << "NumInspectedDevices = " << gpu_ins.NumInspectedDevices() << std::endl;
     PrintVar(repeat);
 
     // display energy and latency
@@ -346,7 +368,10 @@ int main(int argc, char** argv)
     std::ofstream f_gpu(strGPUReadingCSV);
     f_gpu << "gpu_id,timestamp,used_memory,power,temperature,memory_util,gpu_util" << std::endl;
     f_gpu << std::fixed;
-    for(unsigned int gpu_id = 0; gpu_id < gpu_ins.NumDevices(); gpu_id++)
+    std::vector<unsigned int> device_ids;
+    gpu_ins.InspectedDeviceIds(device_ids);
+    std::sort(device_ids.begin(), device_ids.end());
+    for(unsigned int gpu_id : device_ids)
     {
         std::vector<GPUInspector::GPUInfo_t> gpu_readings;
         gpu_ins.ExportReadings(gpu_id, gpu_readings);
