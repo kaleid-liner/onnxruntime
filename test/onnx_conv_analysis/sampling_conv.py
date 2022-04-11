@@ -158,12 +158,12 @@ def finegrained_sampling_conv(cfgs, count):
     return ncfgs
 
 
-# def read_conv_zoo(filename = "conv.csv"):
-#     filename = os.path.join(BASE_DIR, filename)
-#     conv_df = pd.read_csv(filename)
-#     hws = conv_df["input_h"]
-#     cins = conv_df["cin"]
-#     couts = conv_df["cout"]
-#     ks = conv_df["ks"]
-#     strides = conv_df["stride"]
-#     return hws, cins, couts, ks, strides
+def read_conv_zoo():
+    filename = os.path.join(BASE_DIR, 'data/conv.csv')
+    conv_df = pd.read_csv(filename)
+    hws = conv_df["input_h"]
+    cins = conv_df["cin"]
+    couts = conv_df["cout"]
+    ks = conv_df["ks"]
+    strides = conv_df["stride"]
+    return hws, cins, couts, ks, strides

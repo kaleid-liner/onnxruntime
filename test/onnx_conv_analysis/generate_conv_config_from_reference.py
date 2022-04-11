@@ -1,12 +1,9 @@
-from distutils.command.config import config
 from email.policy import default
 import json
 import argparse
 import random
-from random import sample
-from tokenize import group
 import numpy as np
-
+import sampling_conv as sc
 
 def inverse_transform_sampling(data, n_bins = 40, n_samples = 1000):
     ''' calculate inversed cdf, for sampling by possibility
@@ -75,7 +72,7 @@ def remove_repeat_items(old_list):
     return new_list
 
 
-def resample_configs(configs_old, resample : int = 0):
+def resample_configs_onnx(configs_old, resample : int = 0):
     '''
     resampled params: image_shape, input_channels, kernel_channels, output_channels, group
                       input_channels = kernel_channels * group
@@ -135,6 +132,40 @@ def resample_configs(configs_old, resample : int = 0):
     return configs_new
 
 
+def resample_configs_nnmeter(configs_old, resample : int = 0, use_builtin_data : bool = False):
+    if use_builtin_data:
+        def helper():
+            return sc.read_conv_zoo()
+    else:
+        def helper():
+            hws = [cfg['image_shape'][0] for cfg in configs_old]
+            cins = [cfg['input_channels'] for cfg in configs_old]
+            couts = [cfg['output_channels'] for cfg in configs_old]
+            ks = [cfg['kernel_shape'][0] for cfg in configs_old]
+            strides = [cfg['strides'][0] for cfg in configs_old]
+            return hws, cins, couts, ks, strides
+    ncfgs = sc.sampling_conv(resample, helper)
+    configs_new = []
+    for c in ncfgs:
+        conv_config = {
+            # flexible params
+            'image_shape' : [c['HW'], c['HW']],
+            'input_channels' : c['CIN'],
+            'kernel_channels' : c['CIN'],
+            'output_channels' : c['COUT'],
+            # constrained params
+            'batch_size' : 1,
+            'kernel_shape' : [c['KERNEL_SIZE'], c['KERNEL_SIZE']],
+            'pads' : [c['KERNEL_SIZE'] // 2, c['KERNEL_SIZE'] // 2],
+            'dilations' : [1, 1],
+            'strides' : [c['STRIDES'], c['STRIDES']],
+            'group' : 1,
+            'has_bias' : True,
+        }
+        configs_new.append(conv_config)
+    return configs_new
+
+
 def main(args):
     # read reference
     with open(args.reference) as f:
@@ -142,7 +173,8 @@ def main(args):
     # generate configs
     configs = [generate_config_from_reference(conv_info) for conv_info in conv_infos]
     if args.resample:
-        configs = resample_configs(configs, args.resample)
+        use_builtin_data = False
+        configs = resample_configs_nnmeter(configs, args.resample, use_builtin_data)
     # save to file
     with open(args.save_path, 'w') as f:
         json.dump(configs, f, indent = 4)
@@ -152,8 +184,9 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser('Generate Gemm kernel config from collected gemm infos.')
     parser.add_argument('reference', type = str, default = None)
-    parser.add_argument('--save-path', type = str, default = './experiment_data/conv_kernel_infos/conv_kernel_configs_new.json')
+    parser.add_argument('--save-path', type = str, default = './experiment_data/conv_kernel_infos/conv_kernel_configs.json')
     parser.add_argument('--resample', type = int, default = 0)
+    # parser.add_argument('--builtin-data', type = str, default = None)
     args = parser.parse_args()
     print(args)
     main(args)

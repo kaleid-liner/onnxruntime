@@ -70,6 +70,10 @@ onnxruntime/core/providers/op_kernel_type_control_overrides_reduced_types.inc
 #experiment data
 test/cudnn_kernel_test/
 test/experiment_data/
+test/kernel_predictor_pipeline/__pycache__/
+test/kernel_predictor_pipeline/workspace/
+test/kernel_predictor_pipeline/runner_backend/__pycache__/
+test/kernel_predictor_pipeline/bak/
 test/onnx_conv_analysis/data/
 test/onnx_gemm_analysis/data/
 test/run_onnx_models/build/
