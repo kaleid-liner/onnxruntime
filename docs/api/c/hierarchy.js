@@ -1,5 +1,6 @@
 var hierarchy =
 [
+    [ "Ort::detail::AllocatedFree", "struct_ort_1_1detail_1_1_allocated_free.html", null ],
     [ "Ort::AllocatorWithDefaultOptions", "struct_ort_1_1_allocator_with_default_options.html", null ],
     [ "Ort::Base< T >", "struct_ort_1_1_base.html", null ],
     [ "Ort::Base< OrtAllocator >", "struct_ort_1_1_base.html", [
@@ -59,9 +60,11 @@ var hierarchy =
     [ "OrtApi", "struct_ort_api.html", null ],
     [ "OrtApiBase", "struct_ort_api_base.html", null ],
     [ "OrtCUDAProviderOptions", "struct_ort_c_u_d_a_provider_options.html", null ],
+    [ "OrtCustomHandleType", "struct_ort_custom_handle_type.html", null ],
     [ "OrtCustomOp", "struct_ort_custom_op.html", [
       [ "Ort::CustomOpBase< TOp, TKernel >", "struct_ort_1_1_custom_op_base.html", null ]
     ] ],
+    [ "OrtMIGraphXProviderOptions", "struct_ort_m_i_graph_x_provider_options.html", null ],
     [ "OrtOpenVINOProviderOptions", "struct_ort_open_v_i_n_o_provider_options.html", null ],
     [ "OrtROCMProviderOptions", "struct_ort_r_o_c_m_provider_options.html", null ],
     [ "Ort::Value::OrtSparseValuesParam", "struct_ort_1_1_value_1_1_ort_sparse_values_param.html", null ],

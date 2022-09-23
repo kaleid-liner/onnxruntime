@@ -10,7 +10,7 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
-<script async src="https://www.googletagmanager.com/gtag/js?id=UA-156955408-1"></script><script> window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', 'UA-156955408-1'); </script> <script type="text/javascript" src="/assets/js/vendor/lunr.min.js"></script> <script type="text/javascript" src="/assets/js/just-the-docs.js"></script> 
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-156955408-1"></script><script type="text/javascript">"use strict"; window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', 'UA-156955408-1'); </script> <script type="text/javascript" src="/assets/js/vendor/lunr.min.js"></script> <script type="text/javascript" src="/assets/js/just-the-docs.js"></script>
 <link href="navtree.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="resize.js"></script>
 <script type="text/javascript" src="navtreedata.js"></script>
@@ -96,12 +96,15 @@ $(document).ready(function(){initNavTree('functions_func_c.html',''); initResiza
 <li>Clone()&#160;:&#160;<a class="el" href="struct_ort_1_1_session_options.html#a370427f223d1ab31116136f6599e1943">Ort::SessionOptions</a></li>
 <li>CloneSessionOptions()&#160;:&#160;<a class="el" href="struct_ort_api.html#a568c0cac7ac496f5ba06a0e730ac5a2b">OrtApi</a></li>
 <li>CompareMemoryInfo()&#160;:&#160;<a class="el" href="struct_ort_api.html#aa93e5b6255d9b3ac72fc06179fd4e537">OrtApi</a></li>
+<li>CopyKernelInfo()&#160;:&#160;<a class="el" href="struct_ort_1_1_custom_op_api.html#ae39a4bb631faea94364121264fb0c7d3">Ort::CustomOpApi</a>, <a class="el" href="struct_ort_api.html#a472ac8b0c5a97d89c372730314f80d29">OrtApi</a></li>
 <li>CreateAllocator()&#160;:&#160;<a class="el" href="struct_ort_api.html#ad3aabe6f82aa81b75048a4bdf937d974">OrtApi</a></li>
 <li>CreateAndRegisterAllocator()&#160;:&#160;<a class="el" href="struct_ort_1_1_env.html#ace62e9a1fe461a42a0b1cc79ee40f421">Ort::Env</a>, <a class="el" href="struct_ort_api.html#a6a0ca4d136819eafea7d87e7f87a82db">OrtApi</a></li>
 <li>CreateArenaCfg()&#160;:&#160;<a class="el" href="struct_ort_api.html#a8f434054a695048e551109ad1166b6b3">OrtApi</a></li>
 <li>CreateArenaCfgV2()&#160;:&#160;<a class="el" href="struct_ort_api.html#a8cb2e18f00a20d076212102177abc00c">OrtApi</a></li>
+<li>CreateCANNProviderOptions()&#160;:&#160;<a class="el" href="struct_ort_api.html#a6415d89ebbda1e04484dab10b36c3fdb">OrtApi</a></li>
 <li>CreateCpu()&#160;:&#160;<a class="el" href="struct_ort_1_1_memory_info.html#a6aba847b75d4d939b825d8a8d291f1e7">Ort::MemoryInfo</a></li>
 <li>CreateCpuMemoryInfo()&#160;:&#160;<a class="el" href="struct_ort_api.html#a6a64ee931925577fd40f5f3f7472cfed">OrtApi</a></li>
+<li>CreateCUDAProviderOptions()&#160;:&#160;<a class="el" href="struct_ort_api.html#a0d29cbf555aa806c050748cf8d2dc172">OrtApi</a></li>
 <li>CreateCustomOpDomain()&#160;:&#160;<a class="el" href="struct_ort_api.html#a8a2137a4d843deb346f9548605c90a61">OrtApi</a></li>
 <li>CreateEnv()&#160;:&#160;<a class="el" href="struct_ort_api.html#a22085f699a2d1adb52f809383f475ed1">OrtApi</a></li>
 <li>CreateEnvWithCustomLogger()&#160;:&#160;<a class="el" href="struct_ort_api.html#a3c7a1993cb380a5f9eb38374245c6343">OrtApi</a></li>
@@ -110,8 +113,10 @@ $(document).ready(function(){initNavTree('functions_func_c.html',''); initResiza
 <li>CreateIoBinding()&#160;:&#160;<a class="el" href="struct_ort_api.html#ae78869517034d061951d9ba6e66fb697">OrtApi</a></li>
 <li>CreateMap()&#160;:&#160;<a class="el" href="struct_ort_1_1_value.html#a028498f12d19f373b7479abe8a4a8b75">Ort::Value</a></li>
 <li>CreateMemoryInfo()&#160;:&#160;<a class="el" href="struct_ort_api.html#a5b666b746c52eaf54b41bf0c99d88cd1">OrtApi</a></li>
+<li>CreateOp()&#160;:&#160;<a class="el" href="struct_ort_1_1_custom_op_api.html#a8c66daa44131353c1ba93ed41078f320">Ort::CustomOpApi</a>, <a class="el" href="struct_ort_api.html#a41ef10344a1abfa900ed29b45f2410b8">OrtApi</a></li>
 <li>CreateOpaque()&#160;:&#160;<a class="el" href="struct_ort_1_1_value.html#aba8bad055b8cdaa1fb57f9aba9e6773e">Ort::Value</a></li>
 <li>CreateOpaqueValue()&#160;:&#160;<a class="el" href="struct_ort_api.html#ae12e59921f2c3480bb4bc0fcf7ddd6ec">OrtApi</a></li>
+<li>CreateOpAttr()&#160;:&#160;<a class="el" href="struct_ort_1_1_custom_op_api.html#a2740576ee3310312e198533bd9f0fddb">Ort::CustomOpApi</a>, <a class="el" href="struct_ort_api.html#ae8dbae9378a2d2aeeca7fcf393c2a712">OrtApi</a></li>
 <li>CreatePrepackedWeightsContainer()&#160;:&#160;<a class="el" href="struct_ort_api.html#a0dcdc66ac26c5d9aae1ccadf09f059fc">OrtApi</a></li>
 <li>CreateRunOptions()&#160;:&#160;<a class="el" href="struct_ort_api.html#a87ba125ce92a1ecfeb3135d85287edfd">OrtApi</a></li>
 <li>CreateSequence()&#160;:&#160;<a class="el" href="struct_ort_1_1_value.html#ad4ca9c86f4996e9490e7e9de960f7afc">Ort::Value</a></li>
