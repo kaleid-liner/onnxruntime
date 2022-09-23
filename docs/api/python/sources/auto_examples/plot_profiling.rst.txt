@@ -26,13 +26,14 @@ Profile the execution of a simple model
 *ONNX Runtime* can profile the execution of the model.
 This example shows how to interpret the results.
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-32
+.. GENERATED FROM PYTHON SOURCE LINES 14-31
 
 .. code-block:: default
 
-    import onnx
-    import onnxruntime as rt
     import numpy
+    import onnx
+
+    import onnxruntime as rt
     from onnxruntime.datasets import get_example
 
 
@@ -53,13 +54,11 @@ This example shows how to interpret the results.
 
 
 
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 33-34
+.. GENERATED FROM PYTHON SOURCE LINES 32-33
 
 Let's load a very simple model and compute some prediction.
 
-.. GENERATED FROM PYTHON SOURCE LINES 34-45
+.. GENERATED FROM PYTHON SOURCE LINES 33-44
 
 .. code-block:: default
 
@@ -67,7 +66,7 @@ Let's load a very simple model and compute some prediction.
     example1 = get_example("mul_1.onnx")
     onnx_model = change_ir_version(example1)
     onnx_model_str = onnx_model.SerializeToString()
-    sess = rt.InferenceSession(onnx_model_str)
+    sess = rt.InferenceSession(onnx_model_str, providers=rt.get_available_providers())
     input_name = sess.get_inputs()[0].name
 
     x = numpy.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], dtype=numpy.float32)
@@ -80,8 +79,6 @@ Let's load a very simple model and compute some prediction.
 
 .. rst-class:: sphx-glr-script-out
 
- Out:
-
  .. code-block:: none
 
     [array([[ 1.,  4.],
@@ -91,19 +88,19 @@ Let's load a very simple model and compute some prediction.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 46-48
+.. GENERATED FROM PYTHON SOURCE LINES 45-47
 
 We need to enable to profiling
 before running the predictions.
 
-.. GENERATED FROM PYTHON SOURCE LINES 48-60
+.. GENERATED FROM PYTHON SOURCE LINES 47-59
 
 .. code-block:: default
 
 
     options = rt.SessionOptions()
     options.enable_profiling = True
-    sess_profile = rt.InferenceSession(onnx_model_str, options)
+    sess_profile = rt.InferenceSession(onnx_model_str, options, providers=rt.get_available_providers())
     input_name = sess.get_inputs()[0].name
 
     x = numpy.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], dtype=numpy.float32)
@@ -118,58 +115,53 @@ before running the predictions.
 
 .. rst-class:: sphx-glr-script-out
 
- Out:
-
  .. code-block:: none
 
-    onnxruntime_profile__2021-03-04_18-40-00.json
+    onnxruntime_profile__2022-09-23_10-28-12.json
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 61-63
+.. GENERATED FROM PYTHON SOURCE LINES 60-62
 
 The results are stored un a file in JSON format.
 Let's see what it contains.
 
-.. GENERATED FROM PYTHON SOURCE LINES 63-71
+.. GENERATED FROM PYTHON SOURCE LINES 62-69
 
 .. code-block:: default
 
     import json
+
     with open(prof_file, "r") as f:
         sess_time = json.load(f)
     import pprint
+
     pprint.pprint(sess_time)
-
-
-    
 
 
 
 
 .. rst-class:: sphx-glr-script-out
 
- Out:
-
  .. code-block:: none
 
     [{'args': {},
       'cat': 'Session',
-      'dur': 101,
+      'dur': 82,
       'name': 'model_loading_array',
       'ph': 'X',
-      'pid': 77,
-      'tid': 77,
-      'ts': 3},
+      'pid': 3088,
+      'tid': 3088,
+      'ts': 2},
      {'args': {},
       'cat': 'Session',
-      'dur': 227,
+      'dur': 262,
       'name': 'session_initialization',
       'ph': 'X',
-      'pid': 77,
-      'tid': 77,
-      'ts': 134}]
+      'pid': 3088,
+      'tid': 3088,
+      'ts': 101}]
 
 
 
@@ -177,28 +169,23 @@ Let's see what it contains.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  0.010 seconds)
+   **Total running time of the script:** ( 0 minutes  0.006 seconds)
 
 
 .. _sphx_glr_download_auto_examples_plot_profiling.py:
 
+.. only:: html
 
-.. only :: html
-
- .. container:: sphx-glr-footer
-    :class: sphx-glr-footer-example
+  .. container:: sphx-glr-footer sphx-glr-footer-example
 
 
+    .. container:: sphx-glr-download sphx-glr-download-python
 
-  .. container:: sphx-glr-download sphx-glr-download-python
+      :download:`Download Python source code: plot_profiling.py <plot_profiling.py>`
 
-     :download:`Download Python source code: plot_profiling.py <plot_profiling.py>`
+    .. container:: sphx-glr-download sphx-glr-download-jupyter
 
-
-
-  .. container:: sphx-glr-download sphx-glr-download-jupyter
-
-     :download:`Download Jupyter notebook: plot_profiling.ipynb <plot_profiling.ipynb>`
+      :download:`Download Jupyter notebook: plot_profiling.ipynb <plot_profiling.ipynb>`
 
 
 .. only:: html
