@@ -1280,19 +1280,8 @@ Return Value:
     // Execute the pooling kernel routine.
     //
 
-#if defined(_OPENMP)
-
-#pragma omp parallel for
-    for (int64_t c = 0; c < int64_t(TotalChannelCount); c++) {
-      PoolKernelRoutine(&WorkBlock, 1, Input + c * InputSize, Output + c * OutputSize);
-    }
-
-#else
-
     MLAS_UNREFERENCED_PARAMETER(OutputSize);
     PoolKernelRoutine(&WorkBlock, TotalChannelCount, Input, Output);
-
-#endif
 #else
     //
     // Use an external thread pool if one is provided.
@@ -1547,6 +1536,42 @@ Return Value:
 
             ChannelOffset += 8;
             c -= 8;
+        }
+
+#elif defined(MLAS_TARGET_POWER)
+
+        while (c >= 32) {
+            auto MaximumVector0 = vec_splats(std::numeric_limits<T8Bits>::lowest());
+            auto MaximumVector1 = vec_splats(std::numeric_limits<T8Bits>::lowest());
+
+            for (size_t k = 0; k < KernelSize; k++) {
+                auto InputVector0 = vec_xl(0,  &Input[k][ChannelOffset]);
+                auto InputVector1 = vec_xl(16, &Input[k][ChannelOffset]);
+
+                MaximumVector0 = vec_max(MaximumVector0, InputVector0);
+                MaximumVector1 = vec_max(MaximumVector1, InputVector1);
+            }
+
+            vec_xst(MaximumVector0, 0, (T8Bits *) Output);
+            vec_xst(MaximumVector1, 16, (T8Bits *) Output);
+
+            Output += 32;
+            ChannelOffset += 32;
+            c -= 32;
+        }
+
+        while (c >= 16) {
+            auto MaximumVector = vec_splats(std::numeric_limits<T8Bits>::lowest());
+
+            for (size_t k = 0; k < KernelSize; k++) {
+                auto InputVector = vec_xl(0,  &Input[k][ChannelOffset]);
+                MaximumVector = vec_max(MaximumVector, InputVector);
+            }
+            vec_xst(MaximumVector, 0, (T8Bits *) Output);
+
+            Output += 16;
+            ChannelOffset += 16;
+            c -= 16;
         }
 
 #endif

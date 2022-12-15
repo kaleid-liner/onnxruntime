@@ -209,7 +209,7 @@ Status AttentionFusion::ApplyImpl(Graph& graph, bool& modified, int graph_level,
     ORT_RETURN_IF_ERROR(Recurse(node, modified, graph_level, logger));
 
     if ((node.GetOutputEdgesCount() >= 2 && node.GetOutputEdgesCount() <= 6) &&  // Add node.GetOutputEdgesCount() == 5/6 for distilbert
-        graph_utils::IsSupportedOptypeVersionAndDomain(node, "LayerNormalization", {1}, kOnnxDomain) &&
+        graph_utils::IsSupportedOptypeVersionAndDomain(node, "LayerNormalization", {1, 17}, kOnnxDomain) &&
         graph_utils::IsSupportedProvider(node, GetCompatibleExecutionProviders())) {
       // Get hidden size from layer norm bias tensor shape.
       const NodeArg& layer_norm_bias = *(node.InputDefs()[2]);
@@ -269,7 +269,7 @@ static bool FuseSubGraphQKImpl(Node& layer_norm,
                                int64_t num_heads,
                                int64_t head_size,
                                const logging::Logger& logger) {
-  std::vector<std::reference_wrapper<const Node>> pivot_nodes;
+  InlinedVector<std::reference_wrapper<const Node>> pivot_nodes;
   if (edges.size() == 2) {
     const Node& qk_div = (edges[0]->GetNode().OpType() == "Div") ? edges[0]->GetNode() : edges[1]->GetNode();
     const Node& qk_matmul = (edges[1]->GetNode().OpType() == "MatMul") ? edges[1]->GetNode() : edges[0]->GetNode();
@@ -316,7 +316,7 @@ static bool FuseSubGraphQKImpl(Node& layer_norm,
       {0, 0, "Reshape", {5, 13}, kOnnxDomain},
       {0, 0, "Add", {7, 13}, kOnnxDomain},
       {0, 0, "MatMul", {1, 9, 13}, kOnnxDomain},
-      {0, 0, "LayerNormalization", {1}, kOnnxDomain}};
+      {0, 0, "LayerNormalization", {1, 17}, kOnnxDomain}};
 
   if (!graph_utils::FindPath(pivot_nodes[0].get(), true, k_path, edges, logger)) {
     DEBUG_LOG("Failed to find path for k");
@@ -375,8 +375,8 @@ static bool FuseSubGraphQKImpl(Node& layer_norm,
   NodeArg& qkv_bias = MergeQkvWeights(graph, hidden_size, q_bias_tensor, k_bias_tensor, v_bias_tensor, false);
   // Create Attention Node.
   const Node& reshape = parent_path_nodes[0];
-  const std::vector<NodeArg*> input_defs{layer_norm.MutableOutputDefs()[0], &qkv_weights, &qkv_bias, mask_int32};
-  const std::vector<NodeArg*> output_defs{graph.GetNode(reshape.Index())->MutableOutputDefs()[0]};
+  const std::array input_defs{layer_norm.MutableOutputDefs()[0], &qkv_weights, &qkv_bias, mask_int32};
+  const std::array output_defs{graph.GetNode(reshape.Index())->MutableOutputDefs()[0]};
   Node& attention_node = graph.AddNode(
       graph.GenerateNodeName("Attention"),
       "Attention",
@@ -624,7 +624,7 @@ bool AttentionFusion::FuseSubGraph(Node& layer_norm, const Node& add_after_layer
       {0, 0, "Reshape", {5, 13}, kOnnxDomain},
       {0, 0, "Add", {7, 13}, kOnnxDomain},
       {0, 0, "MatMul", {1, 9, 13}, kOnnxDomain},
-      {0, 0, "LayerNormalization", {1}, kOnnxDomain}};
+      {0, 0, "LayerNormalization", {1, 17}, kOnnxDomain}};
 
   std::vector<const Node::EdgeEnd*> edges;
   if (!graph_utils::FindPath(add_after_layer_norm, true, parent_path, edges, logger)) {
@@ -669,7 +669,7 @@ bool AttentionFusion::FuseSubGraph(Node& layer_norm, const Node& add_after_layer
     return false;
   }
 
-  //store parent path
+  // store parent path
   std::vector<std::reference_wrapper<const Node>> parent_path_nodes{reshape, transpose, qkv_matmul, v_transpose, v_reshape, v_add, v_matmul};
 
   // Find mask nodes: Unsqueeze -> Unsqueeze -> (Cast) -> Sub -> Mul -> Add -> Softmax --> [MatMul]

@@ -104,16 +104,11 @@ Abstract:
 #if !defined(BUILD_MLAS_NO_ONNXRUNTIME)
 #include "core/platform/threadpool.h"
 
-#if defined(MLAS_TARGET_ARM64) && defined(__linux__)
-
 #include "core/common/cpuid_info.h"
 using MLAS_CPUIDINFO = onnxruntime::CPUIDInfo;
 
-#endif // MLAS_TARGET_ARM64
-
 #else  // BUILD_MLAS_NO_ONNXRUNTIME
 
-#if defined(MLAS_TARGET_ARM64) && defined(__linux__)
 class MLASCPUIDInfo
 {
    public:
@@ -126,6 +121,16 @@ class MLASCPUIDInfo
     // ARM
     bool HasArmNeonDot() const { return has_arm_neon_dot_; }
 
+    uint32_t GetCurrentCoreIdx() const { return 0xFFFFFFFF; }
+
+    int32_t GetCurrentUarch() const { return -1; }
+
+    int32_t GetCoreUarch(uint32_t coreId) const { return -1; }
+
+    bool IsCoreArmv8NarrowLd(uint32_t coreId) const { return false; }
+
+    bool IsCurrentCoreArmv8NarrowLd() const { return false; }
+
    private:
     MLASCPUIDInfo();
 
@@ -133,13 +138,48 @@ class MLASCPUIDInfo
 };
 using MLAS_CPUIDINFO = MLASCPUIDInfo;
 
+#if defined(MLAS_TARGET_ARM64)
+/**
+ * @brief IDs for cpu microarchitectures.
+ *
+ * Copied from python cpuinfo package. Can't use the definition
+ * from cpuinfo directly as it causes lots of compilation issues
+ * in many platforms that we support.
+ */
+enum MlasUArch {
+    cpuinfo_uarch_unknown = 0,
+
+    /** ARM Cortex-A32. */
+    cpuinfo_uarch_cortex_a32 = 0x00300332,
+    /** ARM Cortex-A35. */
+    cpuinfo_uarch_cortex_a35 = 0x00300335,
+    /** ARM Cortex-A53. */
+    cpuinfo_uarch_cortex_a53 = 0x00300353,
+    /** ARM Cortex-A55 revision 0 (restricted dual-issue capabilities compared to revision 1+). */
+    cpuinfo_uarch_cortex_a55r0 = 0x00300354,
+    /** ARM Cortex-A55. */
+    cpuinfo_uarch_cortex_a55 = 0x00300355,
+    /** ARM Cortex-A57. */
+    cpuinfo_uarch_cortex_a57 = 0x00300357,
+    /** ARM Cortex-A65. */
+    cpuinfo_uarch_cortex_a65 = 0x00300365,
+    /** ARM Cortex-A72. */
+    cpuinfo_uarch_cortex_a72 = 0x00300372,
+    /** ARM Cortex-A73. */
+    cpuinfo_uarch_cortex_a73 = 0x00300373,
+    /** ARM Cortex-A75. */
+    cpuinfo_uarch_cortex_a75 = 0x00300375,
+    /** ARM Cortex-A76. */
+    cpuinfo_uarch_cortex_a76 = 0x00300376,
+    /** ARM Cortex-A77. */
+    cpuinfo_uarch_cortex_a77 = 0x00300377,
+    /** ARM Cortex-A78. */
+    cpuinfo_uarch_cortex_a78 = 0x00300378,
+};
+
 #endif // MLAS_TARGET_ARM64
 
 #endif // BUILD_MLAS_NO_ONNXRUNTIME
-
-#if defined(_OPENMP)
-#include <omp.h>
-#endif
 
 //
 // Define the maximum number of threads supported by this implementation.
@@ -532,6 +572,8 @@ extern "C" {
     MLAS_GEMM_FLOAT_KERNEL MlasSgemmKernelPOWER10;
     MLAS_GEMM_DOUBLE_KERNEL MlasDgemmKernel;
     MLAS_GEMM_DOUBLE_KERNEL MlasDgemmKernelPOWER10;
+    MLAS_QUANTIZE_LINEAR_S8_KERNEL MlasQuantizeLinearS8KernelVSX;
+    MLAS_QUANTIZE_LINEAR_U8_KERNEL MlasQuantizeLinearU8KernelVSX;
 #else
     MLAS_GEMM_FLOAT_KERNEL MlasSgemmKernelZero;
     MLAS_GEMM_FLOAT_KERNEL MlasSgemmKernelAdd;
@@ -695,11 +737,18 @@ extern const MLAS_GEMM_QUANT_DISPATCH MlasGemmU8S8DispatchAvx2;
 extern const MLAS_GEMM_QUANT_DISPATCH MlasGemmU8U8DispatchAvx2;
 extern const MLAS_GEMM_QUANT_DISPATCH MlasGemmU8X8DispatchNeon;
 extern const MLAS_GEMM_QUANT_DISPATCH MlasGemmX8S8DispatchNeon;
-extern const MLAS_GEMM_QUANT_DISPATCH MlasGemmS8S8DispatchNeon;
 extern const MLAS_GEMM_QUANT_DISPATCH MlasGemmU8X8DispatchUdot;
 extern const MLAS_GEMM_QUANT_DISPATCH MlasGemmS8S8DispatchSdot;
 extern const MLAS_GEMM_QUANT_DISPATCH MlasGemmU8X8DispatchWasmSimd;
 extern const MLAS_GEMM_QUANT_DISPATCH MlasGemmQuantDispatchDefault;
+extern const MLAS_GEMM_QUANT_DISPATCH MlasGemm8X8DispatchPOWER10;
+
+//
+// Symmetric quantized qgemm dispatch structure
+//
+struct MLAS_SYMM_QGEMM_DISPATCH;
+extern const MLAS_SYMM_QGEMM_DISPATCH MlasSymmQgemmS8DispatchNeon;
+extern const MLAS_SYMM_QGEMM_DISPATCH MlasSymmQgemmS8DispatchSdot;
 
 //
 // Symmetric quantized integer convolution dispatch structure.
@@ -711,8 +760,10 @@ extern const MLAS_CONV_SYM_DISPATCH MlasConvSymDispatchAvx2;
 extern const MLAS_CONV_SYM_DISPATCH MlasConvSymDispatchAvxVnni;
 extern const MLAS_CONV_SYM_DISPATCH MlasConvSymDispatchAvx512Core;
 extern const MLAS_CONV_SYM_DISPATCH MlasConvSymDispatchAvx512Vnni;
-extern const MLAS_CONV_SYM_DISPATCH MlasConvSymDispatchNeon;
-extern const MLAS_CONV_SYM_DISPATCH MlasConvSymDispatchDot;
+extern const MLAS_CONV_SYM_DISPATCH MlasConvSymU8DispatchNeon;
+extern const MLAS_CONV_SYM_DISPATCH MlasConvSymS8DispatchNeon;
+extern const MLAS_CONV_SYM_DISPATCH MlasConvSymU8DispatchDot;
+extern const MLAS_CONV_SYM_DISPATCH MlasConvSymS8DispatchDot;
 
 //
 // Quantized depthwise convolution kernels.
@@ -765,22 +816,12 @@ struct MLAS_CONV_SYM_POST_PROCESS_PARAMS {
     int32_t OutputZeroPoint;
 };
 
-typedef
-void
-(MLASCALL MLAS_CONV_SYM_DEPTHWISE_ROUTINE_KERNELSIZE)(
-    void const* const* InputIndirection,
-    int8_t const* Filter,
-    size_t Channels,
-    void* Output,
-    size_t OutputCount,
-    MLAS_CONV_SYM_POST_PROCESS_PARAMS const* PostProcessParams,
-    unsigned KernelFlags,
-    bool InputIsSigned
-    );
-
 //
 // Environment information class.
 //
+
+enum MlasCoreType { mlas_core_unknown = 0, mlas_core_little = 2, mlas_core_big = 3 };
+
 
 struct MLAS_PLATFORM {
 
@@ -796,6 +837,7 @@ struct MLAS_PLATFORM {
 #elif defined(MLAS_TARGET_ARM64)
     const MLAS_GEMM_QUANT_DISPATCH* GemmU8X8Dispatch;
 #endif
+    const MLAS_SYMM_QGEMM_DISPATCH* SymmQgemmDispatch{nullptr};
 
     const MLAS_CONV_SYM_DISPATCH* ConvSymU8S8Dispatch{nullptr};
     const MLAS_CONV_SYM_DISPATCH* ConvSymS8S8Dispatch{nullptr};
@@ -807,6 +849,9 @@ struct MLAS_PLATFORM {
 
 #if defined(MLAS_TARGET_POWER)
     MLAS_GEMM_DOUBLE_KERNEL* GemmDoubleKernel;
+    const MLAS_GEMM_QUANT_DISPATCH* GemmU8X8Dispatch;
+    MLAS_QUANTIZE_LINEAR_S8_KERNEL* QuantizeLinearS8Kernel;
+    MLAS_QUANTIZE_LINEAR_U8_KERNEL* QuantizeLinearU8Kernel;
 #endif
 #if defined(MLAS_TARGET_AMD64)
     MLAS_SGEMM_KERNEL_M1_ROUTINE* KernelM1Routine;
@@ -845,7 +890,11 @@ struct MLAS_PLATFORM {
 
 };
 
-extern MLAS_PLATFORM MlasPlatform;
+inline
+MLAS_PLATFORM& GetMlasPlatform(){
+    static MLAS_PLATFORM MlasPlatform;
+    return MlasPlatform;
+}
 
 //
 // Threading support.
@@ -865,6 +914,13 @@ MlasExecuteThreaded(
     ptrdiff_t Iterations,
     MLAS_THREADPOOL* ThreadPool
     );
+
+constexpr
+size_t
+MlasDivRoundup(size_t up, size_t down)
+{
+    return (up + down - 1) / down;
+}
 
 /**
  * @brief Distribute multiple iterations of work over a thread pool if supported
@@ -888,12 +944,7 @@ MlasGetMaximumThreadCount(
 {
 #if defined(BUILD_MLAS_NO_ONNXRUNTIME)
     MLAS_UNREFERENCED_PARAMETER(ThreadPool);
-
-#if defined(_OPENMP)
-    return (omp_get_num_threads() == 1) ? omp_get_max_threads() : 1;
-#else
     return 1;
-#endif
 #else
     return onnxruntime::concurrency::ThreadPool::DegreeOfParallelism(ThreadPool);
 #endif
@@ -1106,6 +1157,8 @@ MlasBroadcastInt32x4(int32_t Value)
     return _mm_set1_epi32(Value);
 #elif defined(MLAS_WASM_SIMD_INTRINSICS)
     return wasm_i32x4_splat(Value);
+#elif defined(MLAS_VSX_INTRINSICS)
+    return vec_splats(Value);
 #else
     return MLAS_INT32X4{Value, Value, Value, Value};
 #endif
@@ -1155,6 +1208,8 @@ MlasAddInt32x4(MLAS_INT32X4 Vector1, MLAS_INT32X4 Vector2)
     return _mm_add_epi32(Vector1, Vector2);
 #elif defined(MLAS_WASM_SIMD_INTRINSICS)
     return wasm_i32x4_add(Vector1, Vector2);
+#elif defined(MLAS_VSX_INTRINSICS)
+    return vec_add(Vector1, Vector2);
 #else
     return Vector1 + Vector2;
 #endif
@@ -1230,6 +1285,8 @@ MlasXorInt32x4(MLAS_INT32X4 Vector1, MLAS_INT32X4 Vector2)
     return _mm_xor_si128(Vector1, Vector2);
 #elif defined(MLAS_WASM_SIMD_INTRINSICS)
     return wasm_v128_xor(Vector1, Vector2);
+#elif defined(MLAS_VSX_INTRINSICS)
+    return vec_xor(Vector1, Vector2);
 #else
     return Vector1 ^ Vector2;
 #endif
@@ -1319,6 +1376,10 @@ MlasBroadcastFloat32x4(float Value)
     return _mm_set1_ps(Value);
 #elif defined(MLAS_WASM_SIMD_INTRINSICS)
     return wasm_f32x4_splat(Value);
+#elif defined(MLAS_VSX_INTRINSICS)
+    // Suppress wrong GCC warnings
+    MLAS_UNREFERENCED_PARAMETER(Value);
+    return vec_splats(Value);
 #else
     return MLAS_FLOAT32X4{Value, Value, Value, Value};
 #endif
@@ -1334,6 +1395,8 @@ MlasBroadcastFloat32x4(const float* Value)
     return _mm_load_ps1(Value);
 #elif defined(MLAS_WASM_SIMD_INTRINSICS)
     return wasm_v128_load32_splat(Value);
+#elif defined(MLAS_VSX_INTRINSICS)
+    return vec_splats(*Value);
 #else
     return MLAS_FLOAT32X4{*Value, *Value, *Value, *Value};
 #endif
@@ -1558,6 +1621,8 @@ MlasAddFloat32x4(MLAS_FLOAT32X4 Vector1, MLAS_FLOAT32X4 Vector2)
     return _mm_add_ps(Vector1, Vector2);
 #elif defined(MLAS_WASM_SIMD_INTRINSICS)
     return wasm_f32x4_add(Vector1, Vector2);
+#elif defined(MLAS_VSX_INTRINSICS)
+    return vec_add(Vector1, Vector2);
 #else
     return Vector1 + Vector2;
 #endif
@@ -1573,6 +1638,8 @@ MlasSubtractFloat32x4(MLAS_FLOAT32X4 Vector1, MLAS_FLOAT32X4 Vector2)
     return _mm_sub_ps(Vector1, Vector2);
 #elif defined(MLAS_WASM_SIMD_INTRINSICS)
     return wasm_f32x4_sub(Vector1, Vector2);
+#elif defined(MLAS_VSX_INTRINSICS)
+    return vec_sub(Vector1, Vector2);
 #else
     return Vector1 - Vector2;
 #endif
@@ -1588,6 +1655,11 @@ MlasMultiplyFloat32x4(MLAS_FLOAT32X4 Vector1, MLAS_FLOAT32X4 Vector2)
     return _mm_mul_ps(Vector1, Vector2);
 #elif defined(MLAS_WASM_SIMD_INTRINSICS)
     return wasm_f32x4_mul(Vector1, Vector2);
+#elif defined(MLAS_VSX_INTRINSICS)
+    // Suppress wrong GCC warnings
+    MLAS_UNREFERENCED_PARAMETER(Vector1);
+    MLAS_UNREFERENCED_PARAMETER(Vector2);
+    return vec_mul(Vector1, Vector2);
 #else
     return Vector1 * Vector2;
 #endif
@@ -1732,7 +1804,8 @@ MlasMaximumFloat32x4(MLAS_FLOAT32X4 Vector1, MLAS_FLOAT32X4 Vector2)
 #elif defined(MLAS_SSE2_INTRINSICS)
     return _mm_max_ps(Vector1, Vector2);
 #elif defined(MLAS_VSX_INTRINSICS)
-    return vec_sel(vec_sel(vec_sel(Vector2, Vector1, vec_cmpgt(Vector1, Vector2)), Vector1, vec_cmpne(Vector1, Vector1)), Vector2, vec_cmpne(Vector2, Vector2));
+    // Don't use vec_max to avoid undefined behavior if NAN
+    return vec_sel(Vector2, Vector1, vec_cmpgt(Vector1, Vector2));
 #elif defined(MLAS_WASM_SIMD_INTRINSICS)
     return wasm_f32x4_max(Vector1, Vector2);
 #else
@@ -1749,7 +1822,8 @@ MlasMinimumFloat32x4(MLAS_FLOAT32X4 Vector1, MLAS_FLOAT32X4 Vector2)
 #elif defined(MLAS_SSE2_INTRINSICS)
     return _mm_min_ps(Vector1, Vector2);
 #elif defined(MLAS_VSX_INTRINSICS)
-    return vec_sel(vec_sel(vec_sel(Vector2, Vector1, vec_cmpgt(Vector2, Vector1)), Vector1, vec_cmpne(Vector1, Vector1)), Vector2, vec_cmpne(Vector2, Vector2));
+    // Don't use vec_min to avoid undefined behavior if NAN
+    return vec_sel(Vector2, Vector1, vec_cmpgt(Vector2, Vector1));
 #elif defined(MLAS_WASM_SIMD_INTRINSICS)
     return wasm_f32x4_min(Vector1, Vector2);
 #else

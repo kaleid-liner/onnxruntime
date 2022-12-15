@@ -5,7 +5,7 @@
 
 #include "core/mlas/inc/mlas.h"
 #include "core/platform/threadpool.h"
-
+#include "core/common/narrow.h"
 #include <cmath>
 
 namespace onnxruntime {
@@ -51,20 +51,20 @@ void GetQuantizationParameter(const float* data, int64_t num_of_elements, float&
   std::ptrdiff_t block_size;
   std::ptrdiff_t num_blocks;
   if (concurrency::ThreadPool::ShouldParallelize(thread_pool) && num_of_elements > granularity) {
-    block_size = (num_of_elements + MAX_DEGREE_OF_PAR_FOR_MINMAX - 1) / MAX_DEGREE_OF_PAR_FOR_MINMAX;
+    block_size = onnxruntime::narrow<std::ptrdiff_t>((num_of_elements + MAX_DEGREE_OF_PAR_FOR_MINMAX - 1) / MAX_DEGREE_OF_PAR_FOR_MINMAX);
     block_size = (block_size + granularity - 1) / granularity * granularity;
-    num_blocks = (num_of_elements + block_size - 1) / block_size;
+    num_blocks = onnxruntime::narrow<std::ptrdiff_t>((num_of_elements + block_size - 1) / block_size);
   } else {
     num_blocks = 1;
-    block_size = num_of_elements;
+    block_size = onnxruntime::narrow<std::ptrdiff_t>(num_of_elements);
   }
 
-  for (int i = 0; i < num_blocks;  i++) {
+  for (int i = 0; i < num_blocks; i++) {
     aggregate[i].min = std::numeric_limits<float>::max();
     aggregate[i].max = std::numeric_limits<float>::lowest();
   }
 
-  const TensorOpCost unit_cost{static_cast<double>(block_size * sizeof(float)), 2.0, static_cast<double>(block_size)};
+  const TensorOpCost unit_cost{static_cast<double>(block_size) * sizeof(float), 2.0, static_cast<double>(block_size)};
   concurrency::ThreadPool::TryParallelFor(thread_pool, num_blocks, unit_cost, [&](std::ptrdiff_t begin, std::ptrdiff_t end) {
     auto begin_idx = begin * block_size;
     auto end_idx = std::min(std::ptrdiff_t(num_of_elements), end * block_size);
@@ -105,8 +105,8 @@ void GetQuantizationParameter(const float* data, int64_t num_of_elements, float&
 }
 
 /**
- * @brief Run MlasQuantizeLinear in parallel, with provided thread pool 
-*/
+ * @brief Run MlasQuantizeLinear in parallel, with provided thread pool
+ */
 template <typename OutputType>
 void ParQuantizeLinear(const float* Input,
                        OutputType* Output,

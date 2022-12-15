@@ -30,6 +30,10 @@ MlasConvDepthwiseKernel(
     size_t KernelSize
     )
 {
+    //
+    // TODO Modify MlasConvDepthwiseGetKernelOutputCnt() function if this kernel
+    // is further optimized.
+    //
 #if defined(MLAS_SSE2_INTRINSICS)
     const __m128i ZeroVector = _mm_setzero_si128();
     const __m128i InputZeroPointVector = _mm_set1_epi16(InputZeroPoint);
@@ -288,14 +292,14 @@ Return Value:
     if (InputIsSigned) {
         if (FilterIsSigned) {
 
-            MlasPlatform.ConvDepthwiseS8S8Kernel(
+            GetMlasPlatform().ConvDepthwiseS8S8Kernel(
                 reinterpret_cast<const int8_t* const*>(Input), static_cast<int8_t>(InputZeroPoint),
                 reinterpret_cast<const int8_t*>(Filter), static_cast<int8_t>(FilterZeroPoint),
                 Output, Channels, OutputCount, KernelSize
                 );
         } else {
 
-            MlasPlatform.ConvDepthwiseS8U8Kernel(
+            GetMlasPlatform().ConvDepthwiseS8U8Kernel(
                 reinterpret_cast<const int8_t* const*>(Input), static_cast<int8_t>(InputZeroPoint),
                 reinterpret_cast<const uint8_t*>(Filter), static_cast<uint8_t>(FilterZeroPoint),
                 Output, Channels, OutputCount, KernelSize
@@ -304,14 +308,14 @@ Return Value:
     } else {
         if (FilterIsSigned) {
 
-            MlasPlatform.ConvDepthwiseU8S8Kernel(
+            GetMlasPlatform().ConvDepthwiseU8S8Kernel(
                 reinterpret_cast<const uint8_t* const*>(Input), static_cast<uint8_t>(InputZeroPoint),
                 reinterpret_cast<const int8_t*>(Filter), static_cast<int8_t>(FilterZeroPoint),
                 Output, Channels, OutputCount, KernelSize
                 );
         } else {
 
-            MlasPlatform.ConvDepthwiseU8U8Kernel(
+            GetMlasPlatform().ConvDepthwiseU8U8Kernel(
                 reinterpret_cast<const uint8_t* const*>(Input), static_cast<uint8_t>(InputZeroPoint),
                 reinterpret_cast<const uint8_t*>(Filter), static_cast<uint8_t>(FilterZeroPoint),
                 Output, Channels, OutputCount, KernelSize

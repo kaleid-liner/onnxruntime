@@ -9,6 +9,7 @@
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #define PY_ARRAY_UNIQUE_SYMBOL onnxruntime_python_ARRAY_API
 #include <numpy/arrayobject.h>
+#include "python/numpy_helper.h"
 
 #include "core/framework/tensor_shape.h"
 #include "core/framework/tensor.h"
@@ -139,7 +140,7 @@ void addSparseTensorMethods(pybind11::module& m) {
 
                     TensorShape dense_shape(py_dense_shape);
                     auto values_type = GetNumpyArrayType(py_values);
-                    auto ml_type = NumpyToOnnxRuntimeTensorType(values_type);
+                    auto ml_type = NumpyTypeToOnnxRuntimeTensorType(values_type);
 
                     std::unique_ptr<PySparseTensor> result;
                     if (IsNumericNumpyType(values_type)) {
@@ -198,7 +199,7 @@ void addSparseTensorMethods(pybind11::module& m) {
 
             TensorShape dense_shape(py_dense_shape);
             auto values_type = GetNumpyArrayType(py_values);
-            auto ml_type = NumpyToOnnxRuntimeTensorType(values_type);
+            auto ml_type = NumpyTypeToOnnxRuntimeTensorType(values_type);
 
             std::unique_ptr<PySparseTensor> result;
             if (IsNumericNumpyType(values_type)) {
@@ -261,7 +262,7 @@ void addSparseTensorMethods(pybind11::module& m) {
             TensorShape values_shape = GetShape(py_values);
             TensorShape index_shape = GetShape(py_indices);
             auto values_type = GetNumpyArrayType(py_values);
-            auto ml_type = NumpyToOnnxRuntimeTensorType(values_type);
+            auto ml_type = NumpyTypeToOnnxRuntimeTensorType(values_type);
 
             std::unique_ptr<PySparseTensor> result;
             if (IsNumericNumpyType(values_type)) {

@@ -4,7 +4,11 @@
 #include "uni_directional_lstm.h"
 
 #include "core/platform/threadpool.h"
-
+//TODO: fix the warnings
+#if defined(_MSC_VER) && !defined(__clang__)
+// Chance of arithmetic overflow could be reduced
+#pragma warning(disable : 26451)
+#endif
 namespace onnxruntime {
 namespace lstm {
 
@@ -82,7 +86,7 @@ UniDirectionalLstm<T>::UniDirectionalLstm(
 template <typename T>
 void UniDirectionalLstm<T>::AllocateBuffers() {
   // allocate and fill with zeroes
-  const bool fill = true;
+  constexpr bool fill = true;
   hidden0_ = Allocate(allocator_, hidden_size_, hidden0_ptr_, fill);
   internal_memory_prev_ = Allocate(allocator_, hidden_size_, internal_memory_prev_ptr_, fill);
   batched_hidden0_ = Allocate(allocator_, batch_size_ * hidden_size_, batched_hidden0_ptr_);
@@ -230,7 +234,7 @@ void UniDirectionalLstm<T>::Compute(const gsl::span<const T>& inputs_arg,
   }
 
   // LSTM Layer
-  gsl::span<T> batched_hidden_state_one_step = batched_hidden0_;
+  gsl::span<const T> batched_hidden_state_one_step = batched_hidden0_;
   gsl::span<T> batched_internal_state_prev_one_step = batched_internal_memory_prev_;
   gsl::span<T> batched_internal_state_clipped_one_step = batched_internal_memory_clipped_;
 
@@ -260,7 +264,7 @@ void UniDirectionalLstm<T>::Compute(const gsl::span<const T>& inputs_arg,
   // DumpMatrix("Input", inputs.data(), seq_length_, batch_size_ * input_size_);
 
   // Calculate the max and min length
-  const auto min_max_pair = std::minmax_element(sequence_lengths.cbegin(), sequence_lengths.cend());
+  const auto min_max_pair = std::minmax_element(sequence_lengths.begin(), sequence_lengths.end());
   int max_sequence_length = *min_max_pair.second;
   int min_sequence_length = std::min(seq_length_, *min_max_pair.first);
 
@@ -274,10 +278,10 @@ void UniDirectionalLstm<T>::Compute(const gsl::span<const T>& inputs_arg,
   AllocateQuantizeBuffers<WeightT>(max_sequence_length);
 
   // apply the weights to all the inputs and save to output_IOFC
-  ComputeGemm(total_rows, hidden_size_x4, input_size_, alpha, inputs.cbegin(), inputs.cend(),
+  ComputeGemm(total_rows, hidden_size_x4, input_size_, alpha, inputs,
               input_weights,
-              beta, output_iofc_.begin(), output_iofc_.end(), hidden_size_x4,
-              quantized_input_or_a_.begin(),
+              beta, output_iofc_, hidden_size_x4,
+              quantized_input_or_a_.data(),
               nullptr,
               thread_pool_);
 
@@ -301,7 +305,7 @@ void UniDirectionalLstm<T>::Compute(const gsl::span<const T>& inputs_arg,
 
   // lambda to do all processing on num_seq_to_compute sequences
   auto sequences_calculator = [&](int seq_start, onnxruntime::concurrency::ThreadPool* ttp) {
-    span_T_const_iter previous_state_end = batched_hidden_state_one_step.cend();
+    auto previous_state_end = batched_hidden_state_one_step.end();
 
     // handling boundaries
     int num_seq_to_compute_adjusted = num_seq_to_compute;
@@ -314,7 +318,7 @@ void UniDirectionalLstm<T>::Compute(const gsl::span<const T>& inputs_arg,
 
     // hidden state can be provided as input for first step, so need to special case that.
     // after the first step this will switch to the output from the previous step
-    span_T_const_iter previous_state = batched_hidden_state_one_step.cbegin() + seq_start * hidden_size_;
+    auto previous_state = batched_hidden_state_one_step.begin() + seq_start * hidden_size_;
 
     // run through steps sequentially
     for (int step = 0; step < max_sequence_length; step++) {
@@ -327,12 +331,12 @@ void UniDirectionalLstm<T>::Compute(const gsl::span<const T>& inputs_arg,
       // calculate Xt*(W[iofc]^T) + Ht-t*R[iofc]
       // Do it sequentially to avoid nested parallelism
       ComputeGemm(num_seq_to_compute_adjusted, hidden_size_x4, hidden_size_, alpha,
-                  previous_state, previous_state_end,       // Ht-1
-                  recurrent_weights,                        // R[iofc]
-                  beta, step_out_IOFC, output_iofc_.end(),  // input contains Xt*(W[iofc]^T)
+                  gsl::span<const T>(&*previous_state, previous_state_end - previous_state),  // Ht-1
+                  recurrent_weights,                                                          // R[iofc]
+                  beta, gsl::span<T>(&*step_out_IOFC, output_iofc_.end() - step_out_IOFC),    // input contains Xt*(W[iofc]^T)
                   hidden_size_x4,
-                  quantized_input_or_a_.begin() + (seq_start * hidden_size_),
-                  quantized_C_buffer_.begin() + (seq_start * hidden_size_x4),
+                  quantized_input_or_a_.data() + (seq_start * hidden_size_),
+                  quantized_C_buffer_.data() + (seq_start * hidden_size_x4),
                   ttp);
 
       DumpMatrix("Xt*(W[iofc]^T) + Ht-t*R[iofc]" + row_str, &*step_out_IOFC, num_seq_to_compute_adjusted, hidden_size_x4);

@@ -11,22 +11,22 @@ void CopyGpuToCpu(void* dst_ptr, const void* src_ptr, const size_t size, const O
 namespace training {
 
 // Return the shape of a tensor slice.
-std::vector<int64_t> GetSliceShape(
+TensorShapeVector GetSliceShape(
     gsl::span<const int64_t> shape,  // before-slicing tensor shape
     const size_t slice_axis,            // axis to slice along
     const size_t num_slices) {          // number of slices along the slicing axis
   ORT_ENFORCE(shape.size() > 0);
   ORT_ENFORCE(slice_axis < shape.size());
   ORT_ENFORCE(num_slices > 0);
-  ORT_ENFORCE(shape.at(slice_axis) > 0);
-  ORT_ENFORCE(shape.at(slice_axis) % num_slices == 0);
+  ORT_ENFORCE(shape[slice_axis] > 0);
+  ORT_ENFORCE(shape[slice_axis] % num_slices == 0);
 
   // Shape of slice along slice_axis.
-  std::vector<int64_t> slice_shape(shape.size());
+  TensorShapeVector slice_shape(shape.size());
   // Compute original slice's shape.
   std::copy(shape.begin(), shape.end(), slice_shape.begin());
   // Replace the sliced dimension.
-  slice_shape.at(slice_axis) = shape.at(slice_axis) / num_slices;
+  slice_shape[slice_axis] = shape[slice_axis] / num_slices;
 
   return slice_shape;
 }
@@ -255,7 +255,7 @@ OrtValue ConcatenateTensors(
   // Concatenated tensors in CPU buffers.
   std::vector<OrtValue> cpu_values;
   // Result tensor's shape.
-  std::vector<int64_t> new_shape = orig_values.front().Get<Tensor>().Shape().GetDimsAsVector();
+  TensorShapeVector new_shape = orig_values.front().Get<Tensor>().Shape().AsShapeVector();
   // Tensor elements' type.
   MLDataType elem_type = orig_values.front().Get<Tensor>().DataType();
   int64_t new_dim = 0;

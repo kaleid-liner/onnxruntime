@@ -26,6 +26,11 @@ std::unique_ptr<Ort::Env> ort_env;
     return -1;                             \
   }
 
+#define ORT_RETURN_IF_NULL_STATUS(arg) \
+  if (!arg) {                              \
+    return -1;                             \
+  }
+
 namespace TestGlobalCustomThreadHooks {
 
 std::vector<std::thread> threads;
@@ -57,6 +62,14 @@ using namespace TestGlobalCustomThreadHooks;
 int main(int argc, char** argv) {
   int status = 0;
   const int thread_pool_size = std::thread::hardware_concurrency();
+
+  //compose affinity string
+  std::stringstream affinity_stream;
+  //skip the 1st logical processor
+  for (int i = 2; i <= thread_pool_size; ++i) {
+    affinity_stream << (i == 2 ? "" : ";") << i;
+  }
+
   ORT_TRY {
     ::testing::InitGoogleTest(&argc, argv);
     const OrtApi* g_ort = OrtGetApiBase()->GetApi(ORT_API_VERSION);
@@ -70,6 +83,18 @@ int main(int argc, char** argv) {
     ORT_RETURN_IF_NON_NULL_STATUS(st_ptr);
 
     st_ptr.reset(g_ort->SetGlobalIntraOpNumThreads(tp_options, thread_pool_size));
+    ORT_RETURN_IF_NON_NULL_STATUS(st_ptr);
+
+    // test with an empty affinity string, error status expected
+    st_ptr.reset(g_ort->SetGlobalIntraOpThreadAffinity(tp_options, ""));
+    ORT_RETURN_IF_NULL_STATUS(st_ptr);
+
+    // test with an oversized affinity string, error status expected
+    std::string long_affinity_str(onnxruntime::kMaxStrLen + 1, '0');
+    st_ptr.reset(g_ort->SetGlobalIntraOpThreadAffinity(tp_options, long_affinity_str.c_str()));
+    ORT_RETURN_IF_NULL_STATUS(st_ptr);
+
+    st_ptr.reset(g_ort->SetGlobalIntraOpThreadAffinity(tp_options, affinity_stream.str().c_str()));
     ORT_RETURN_IF_NON_NULL_STATUS(st_ptr);
 
     st_ptr.reset(g_ort->SetGlobalCustomCreateThreadFn(tp_options, CreateThreadCustomized));
@@ -100,12 +125,6 @@ int main(int argc, char** argv) {
 
   //TODO: Fix the C API issue
   ort_env.reset();  //If we don't do this, it will crash
-
-#ifndef _OPENMP
-  const int expexted_custom_calls = (thread_pool_size - 1) << 1;
-  ORT_ENFORCE(custom_creation_hook_called == expexted_custom_calls, "custom thread creation function was not called as expected");
-  ORT_ENFORCE(custom_join_hook_called == expexted_custom_calls, "custom thread join function was not called as expected");
-#endif
 
 #ifndef USE_ONNXRUNTIME_DLL
   //make memory leak checker happy

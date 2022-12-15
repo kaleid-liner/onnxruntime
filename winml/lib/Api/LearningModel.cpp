@@ -105,7 +105,7 @@ LearningModel::LearningModel(
                               0);                 // number of bytes to map. 0 means read whole file.
 
   WINML_THROW_HR_IF_TRUE_MSG(__HRESULT_FROM_WIN32(GetLastError()),
-                             file_mapping == nullptr,
+                             buffer == nullptr,
                              "Model load failed!");
   LARGE_INTEGER file_size;
   WINML_THROW_HR_IF_FALSE_MSG(__HRESULT_FROM_WIN32(GetLastError()),
@@ -252,6 +252,13 @@ LearningModel::OutputFeatures() try {
   WINML_THROW_IF_FAILED(model_info_->GetOutputFeatures(&features));
   winrt::attach_abi(out, features);
   return out;
+}
+WINML_CATCH_ALL
+
+void LearningModel::SetName(const hstring& name) try {
+  auto name_std_str = _winml::Strings::UTF8FromHString(name);
+  auto name_c_str = name_std_str.c_str();
+  WINML_THROW_IF_FAILED(model_->SetName(name_c_str));
 }
 WINML_CATCH_ALL
 

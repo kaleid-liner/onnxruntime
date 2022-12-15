@@ -8,8 +8,27 @@ using Xunit;
 
 namespace Microsoft.ML.OnnxRuntime.Tests
 {
-    public partial class InferenceTest
+  /// <summary>
+  /// This is compensate for the absence of string.Contains() in .NET Standard 2.0
+  /// Contains(String, StringComparison)
+  /// </summary>
+  public static class StringExtensions
+  {
+    public static bool Contains(this String str, String substring,
+                                StringComparison comp)
     {
+      if (substring == null)
+        throw new ArgumentNullException("substring",
+                                     "substring cannot be null.");
+      else if (!Enum.IsDefined(typeof(StringComparison), comp))
+        throw new ArgumentException("comp is not a member of StringComparison",
+                                 "comp");
+
+      return str.IndexOf(substring, comp) >= 0;
+    }
+  }
+  public partial class InferenceTest
+  {
         private const string module = "onnxruntime.dll";
         private const string propertiesFile = "Properties.txt";
 
@@ -45,6 +64,71 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 }
             }
         }
+
+#if USE_CUDA
+
+        [Fact(DisplayName = "TestCUDAProviderOptions")]
+        private void TestCUDAProviderOptions()
+        {
+            string modelPath = Path.Combine(Directory.GetCurrentDirectory(), "squeezenet.onnx");
+
+            using (var cleanUp = new DisposableListTest<IDisposable>())
+            {
+                var cudaProviderOptions = new OrtCUDAProviderOptions();
+                cleanUp.Add(cudaProviderOptions);
+
+                var providerOptionsDict = new Dictionary<string, string>();
+                providerOptionsDict["device_id"] = "0";
+                providerOptionsDict["gpu_mem_limit"] = "20971520";
+                providerOptionsDict["arena_extend_strategy"] = "kSameAsRequested";
+                providerOptionsDict["cudnn_conv_algo_search"] = "DEFAULT";
+                providerOptionsDict["do_copy_in_default_stream"] = "1";
+                providerOptionsDict["cudnn_conv_use_max_workspace"] = "1";
+                providerOptionsDict["cudnn_conv1d_pad_to_nc1d"] = "1";
+                cudaProviderOptions.UpdateOptions(providerOptionsDict);
+
+                var resultProviderOptionsDict = new Dictionary<string, string>();
+                ProviderOptionsValueHelper.StringToDict(cudaProviderOptions.GetOptions(), resultProviderOptionsDict);
+
+                // test provider options configuration
+                string value;
+                value = resultProviderOptionsDict["device_id"];
+                Assert.Equal("0", value);
+                value = resultProviderOptionsDict["gpu_mem_limit"];
+                Assert.Equal("20971520", value);
+                value = resultProviderOptionsDict["arena_extend_strategy"];
+                Assert.Equal("kSameAsRequested", value);
+                value = resultProviderOptionsDict["cudnn_conv_algo_search"];
+                Assert.Equal("DEFAULT", value);
+                value = resultProviderOptionsDict["do_copy_in_default_stream"];
+                Assert.Equal("1", value);
+                value = resultProviderOptionsDict["cudnn_conv_use_max_workspace"];
+                Assert.Equal("1", value);
+                value = resultProviderOptionsDict["cudnn_conv1d_pad_to_nc1d"];
+                Assert.Equal("1", value);
+
+                // test correctness of provider options
+                SessionOptions options = SessionOptions.MakeSessionOptionWithCudaProvider(cudaProviderOptions);
+                cleanUp.Add(options);
+
+                var session = new InferenceSession(modelPath, options);
+                cleanUp.Add(session);
+
+                var inputMeta = session.InputMetadata;
+                var container = new List<NamedOnnxValue>();
+                float[] inputData = TestDataLoader.LoadTensorFromFile(@"bench.in"); // this is the data for only one input tensor for this model
+                foreach (var name in inputMeta.Keys)
+                {
+                    Assert.Equal(typeof(float), inputMeta[name].ElementType);
+                    Assert.True(inputMeta[name].IsTensor);
+                    var tensor = new DenseTensor<float>(inputData, inputMeta[name].Dimensions);
+                    container.Add(NamedOnnxValue.CreateFromTensor<float>(name, tensor));
+                }
+
+                session.Run(container);
+            }
+        }
+#endif
 
 #if USE_TENSORRT
         [Fact(DisplayName = "CanRunInferenceOnAModelWithTensorRT")]
@@ -148,6 +232,11 @@ namespace Microsoft.ML.OnnxRuntime.Tests
         }
 #endif
 
+        private static Func<DirectoryInfo, IEnumerable<DirectoryInfo>> getOpsetDirectories = delegate (DirectoryInfo modelsDirInfo)
+        {
+            return modelsDirInfo.EnumerateDirectories("opset*", SearchOption.AllDirectories);
+        };
+
         private static Dictionary<string, string> GetSkippedModels(DirectoryInfo modelsDirInfo)
         {
             var skipModels = new Dictionary<string, string>() {
@@ -164,6 +253,7 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 { "tf_resnet_v1_50", "result mismatch when Conv BN Fusion is applied" },
                 { "tf_resnet_v1_101", "result mismatch when Conv BN Fusion is applied" },
                 { "tf_resnet_v1_152", "result mismatch when Conv BN Fusion is applied" },
+                { "cntk_simple_seg", "Bad onnx test output caused by wrong SAME_UPPER/SAME_LOWER for ConvTranspose" },
                 { "coreml_Imputer-LogisticRegression_sklearn_load_breast_cancer", "Can't determine model file name" },
                 { "mask_rcnn_keras", "Model should be edited to remove the extra outputs" },
                 { "test_strnormalizer_export_monday_casesensintive_lower", "ElementType not currently supported"},
@@ -239,7 +329,6 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 { "test_min_uint16", "node test error"},
                 { "test_adam_multiple", "node test error"},
                 { "test_loop13_seq", "node test error"},
-                { "test_convtranspose_autopad_same", "node test error"},
                 { "test_training_dropout_default_mask", "node test error"},
                 { "test_min_int8", "node test error"},
                 { "test_identity_sequence", "data type not supported"},
@@ -275,6 +364,23 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 { "test_optional_get_element_sequence", "not implemented yet"},
                 { "test_optional_has_element", "not implemented yet"},
                 { "test_optional_has_element_empty", "not implemented yet"},
+                { "test_identity_opt", "opset16 version not implemented yet"},
+                { "test_if_opt", "opset16 version not implemented yet"},
+                { "test_loop16_seq_none", "opset16 version not implemented yet"},
+                { "test_sequence_map_extract_shapes", "sequence type is not supported in test infra." },
+                { "test_sequence_map_identity_1_sequence_1_tensor", "sequence type is not supported in test infra." },
+                { "test_sequence_map_identity_1_sequence_1_tensor_expanded", "sequence type is not supported in test infra." },
+                { "test_sequence_map_add_1_sequence_1_tensor", "sequence type is not supported in test infra." },
+                { "test_sequence_map_identity_1_sequence_expanded", "sequence type is not supported in test infra." },
+                { "test_sequence_map_identity_2_sequences", "sequence type is not supported in test infra." },
+                { "test_sequence_map_add_2_sequences_expanded", "sequence type is not supported in test infra." },
+                { "test_sequence_map_identity_2_sequences_expanded", "sequence type is not supported in test infra." },
+                { "test_sequence_map_extract_shapes_expanded", "sequence type is not supported in test infra." },
+                { "test_sequence_map_add_1_sequence_1_tensor_expanded", "sequence type is not supported in test infra." },
+                { "test_sequence_map_add_2_sequences", "sequence type is not supported in test infra." },
+                { "test_sequence_map_identity_1_sequence", "sequence type is not supported in test infra." },
+                { "BERT-Squad-int8", "training domain"},
+                { "YOLOv3-12-int8", "training_domain"}
             };
 
             // The following models fails on nocontribops win CI
@@ -291,7 +397,7 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             var isMlOpsDisabled = (disableMlOpsEnvVar != null) ? disableMlOpsEnvVar.Equals("ON") : false;
             if (isMlOpsDisabled)
             {
-                foreach (var opsetDir in modelsDirInfo.EnumerateDirectories())
+                foreach (var opsetDir in getOpsetDirectories(modelsDirInfo))
                 {
                     foreach (var modelDir in opsetDir.EnumerateDirectories())
                     {
@@ -322,6 +428,13 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 skipModels["coreml_VGG16_ImageNet"] = "System out of memory";
                 skipModels["test_ssd"] = "System out of memory";
                 skipModels["roberta_sequence_classification"] = "System out of memory";
+                // models from model zoo
+                skipModels["VGG 19"] = "bad allocation";
+                skipModels["VGG 19-caffe2"] = "bad allocation";
+                skipModels["VGG 19-bn"] = "bad allocation";
+                skipModels["VGG 16"] = "bad allocation";
+                skipModels["VGG 16-bn"] = "bad allocation";
+                skipModels["VGG 16-fp32"] = "bad allocation";
             }
 
             return skipModels;
@@ -333,14 +446,16 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             var modelsDirInfo = new DirectoryInfo(modelsDir);
             var skipModels = GetSkippedModels(modelsDirInfo);
 
-            foreach (var opsetDir in modelsDirInfo.EnumerateDirectories())
+            foreach (var opsetDir in getOpsetDirectories(modelsDirInfo))
             {
                 //var modelRoot = new DirectoryInfo(Path.Combine(modelsDir, opsetDir.Name));
                 foreach (var modelDir in opsetDir.EnumerateDirectories())
                 {
-                    if (!skipModels.ContainsKey(modelDir.Name))
+                    if (!(skipModels.ContainsKey(modelDir.Name) ||
+                          modelDir.Name.Contains("int8", StringComparison.OrdinalIgnoreCase) ||
+                          modelDir.Name.Contains("qdq", StringComparison.OrdinalIgnoreCase)))
                     {
-                        yield return new object[] { modelDir.Parent.Name, modelDir.Name };
+                        yield return new object[] { modelDir.Parent.FullName, modelDir.Name };
                     }
                 } //model
             } //opset
@@ -352,15 +467,16 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             var modelsDirInfo = new DirectoryInfo(modelsDir);
             var skipModels = GetSkippedModels(modelsDirInfo);
 
-            foreach (var opsetDir in modelsDirInfo.EnumerateDirectories())
+            foreach (var opsetDir in getOpsetDirectories(modelsDirInfo))
             {
-                var modelRoot = new DirectoryInfo(Path.Combine(modelsDir, opsetDir.Name));
-                foreach (var modelDir in modelRoot.EnumerateDirectories())
+                foreach (var modelDir in opsetDir.EnumerateDirectories())
                 {
-                    if (skipModels.ContainsKey(modelDir.Name))
+                    if (skipModels.ContainsKey(modelDir.Name) ||
+                        modelDir.Name.Contains("int8", StringComparison.OrdinalIgnoreCase) ||
+                        modelDir.Name.Contains("qdq", StringComparison.OrdinalIgnoreCase))
                     {
                         //Console.WriteLine("Model {0} is skipped due to the error: {1}", modelDir.FullName, skipModels[modelDir.Name]);
-                        yield return new object[] { modelDir.Parent.Name, modelDir.Name };
+                        yield return new object[] { modelDir.Parent.FullName, modelDir.Name };
                     }
 
                 }
@@ -370,12 +486,13 @@ namespace Microsoft.ML.OnnxRuntime.Tests
         [Theory(DisplayName = "TestPreTrainedModels")]
         [MemberData(nameof(GetModelsForTest))]
         [MemberData(nameof(GetSkippedModelForTest), Skip = "Skipped due to Error, please fix the error and enable the test")]
-        private void TestPreTrainedModels(string opset, string modelName)
+        private void TestPreTrainedModels(string opsetDir, string modelName)
         {
-            var modelsDir = GetTestModelsDir();
+            var opsetDirInfo = new DirectoryInfo(opsetDir);
+            var opset = opsetDirInfo.Name;
             string onnxModelFileName = null;
 
-            var modelDir = new DirectoryInfo(Path.Combine(modelsDir, opset, modelName));
+            var modelDir = new DirectoryInfo(Path.Combine(opsetDir, modelName));
 
             try
             {
@@ -450,6 +567,10 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                                     {
                                         Assert.Equal(result.AsTensor<float>(), outputValue.AsTensor<float>(), new FloatComparer());
                                     }
+                                    else if (outputMeta.ElementType == typeof(double))
+                                    {
+                                        Assert.Equal(result.AsTensor<double>(), outputValue.AsTensor<double>(), new DoubleComparer());
+                                    }
                                     else if (outputMeta.ElementType == typeof(int))
                                     {
                                         Assert.Equal(result.AsTensor<int>(), outputValue.AsTensor<int>(), new ExactComparer<int>());
@@ -492,12 +613,12 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                                     }
                                     else
                                     {
-                                        Assert.True(false, "The TestPretrainedModels does not yet support output of type " + nameof(outputMeta.ElementType));
+                                        Assert.True(false, $"{nameof(TestPreTrainedModels)} does not yet support output of type {outputMeta.ElementType}");
                                     }
                                 }
                                 else
                                 {
-                                    Assert.True(false, "TestPretrainedModel cannot handle non-tensor outputs yet");
+                                    Assert.True(false, $"{nameof(TestPreTrainedModels)} cannot handle non-tensor outputs yet");
                                 }
                             }
                         }
@@ -564,6 +685,12 @@ namespace Microsoft.ML.OnnxRuntime.Tests
 
                 string libFullPath = Path.Combine(Directory.GetCurrentDirectory(), libName);
                 Assert.True(File.Exists(libFullPath), $"Expected lib {libFullPath} does not exist.");
+
+                var ortEnvInstance = OrtEnv.Instance();
+                string[] providers = ortEnvInstance.GetAvailableProviders();
+                if (Array.Exists(providers, provider => provider == "CUDAExecutionProvider")) {
+                    option.AppendExecutionProvider_CUDA(0);
+                }
 
                 IntPtr libraryHandle = IntPtr.Zero;
                 try

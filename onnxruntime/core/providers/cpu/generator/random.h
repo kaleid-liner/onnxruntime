@@ -4,7 +4,7 @@
 #pragma once
 
 #include <random>
-#include "gsl/gsl"
+#include "core/common/gsl.h"
 
 #include "core/common/common.h"
 #include "core/framework/op_kernel.h"
@@ -34,8 +34,8 @@ class RandomNormal final : public OpKernel {
     ORT_ENFORCE(ONNX_NAMESPACE::TensorProto::DataType_IsValid(dtype_) && dtype_ != ONNX_NAMESPACE::TensorProto::UNDEFINED,
                 "Invalid dtype of ", dtype_);
 
-    std::vector<int64_t> shape;
-    ORT_ENFORCE(info.GetAttrs<int64_t>("shape", shape).IsOK());
+    TensorShapeVector shape;
+    ORT_ENFORCE(info.GetAttrs("shape", shape).IsOK());
     shape_ = TensorShape(shape);
   }
 
@@ -110,8 +110,8 @@ class RandomUniform final : public OpKernel {
     ORT_ENFORCE(ONNX_NAMESPACE::TensorProto::DataType_IsValid(dtype_) && dtype_ != ONNX_NAMESPACE::TensorProto::UNDEFINED,
                 "Invalid dtype of ", dtype_);
 
-    std::vector<int64_t> shape;
-    ORT_ENFORCE(info.GetAttrs<int64_t>("shape", shape).IsOK());
+    TensorShapeVector shape;
+    ORT_ENFORCE(info.GetAttrs("shape", shape).IsOK());
     shape_ = TensorShape(shape);
   }
 

@@ -139,7 +139,7 @@ struct CustomOpKernel : OpKernel {
   void* op_kernel_;
 };
 
-common::Status CreateCustomRegistry(const std::vector<OrtCustomOpDomain*>& op_domains,
+common::Status CreateCustomRegistry(gsl::span<OrtCustomOpDomain* const> op_domains,
                                     std::shared_ptr<CustomRegistry>& output) {
   output = std::make_shared<CustomRegistry>();
 
@@ -248,6 +248,15 @@ common::Status CreateCustomRegistry(const std::vector<OrtCustomOpDomain*>& op_do
           .SetDomain(domain->domain_)
           .SinceVersion(1);
 
+      // GetInputMemoryType was introduced in ver 13. This check allows custom ops compiled using older versions
+      // to work with newer versions (> 12) of the ORT binary.
+      if (op->version > 12) {
+        auto input_count = op->GetInputTypeCount(op);
+        for (size_t i = 0; i < input_count; i++) {
+          def_builder.InputMemoryType(op->GetInputMemoryType(op, i), i);
+        }
+      }
+
       for (auto& id : type_constraint_ids[op]) {
         def_builder.TypeConstraint(id, DataTypeImpl::AllTensorTypes());
       }
@@ -258,8 +267,9 @@ common::Status CreateCustomRegistry(const std::vector<OrtCustomOpDomain*>& op_do
         def_builder.Provider(onnxruntime::kCpuExecutionProvider);
       }
 
-      KernelCreateFn kernel_create_fn = [op](const OpKernelInfo& info) -> OpKernel* {
-        return new CustomOpKernel(info, *op);
+      KernelCreateFn kernel_create_fn = [op](FuncManager&, const OpKernelInfo& info, std::unique_ptr<OpKernel>& out) -> Status {
+        out = std::make_unique<CustomOpKernel>(info, *op);
+        return Status::OK();
       };
 
       KernelCreateInfo create_info(def_builder.Build(), kernel_create_fn);

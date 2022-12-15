@@ -14,7 +14,8 @@ namespace Microsoft.ML.OnnxRuntime
     };
 
     // NOTE: The order of the APIs in this struct should match exactly that in
-    // OrtApi ort_api_1_to_4 (onnxruntime_c_api.cc)
+    // OrtApi ort_api_1_to_<latest_version> (onnxruntime/core/session/onnxruntime_c_api.cc)
+    // If syncing your new C API, any other C APIs before yours also need to be synced here if haven't
     [StructLayout(LayoutKind.Sequential)]
     public struct OrtApi
     {
@@ -235,6 +236,30 @@ namespace Microsoft.ML.OnnxRuntime
         public IntPtr SetGlobalCustomJoinThreadFn;
         public IntPtr SynchronizeBoundInputs;
         public IntPtr SynchronizeBoundOutputs;
+        public IntPtr SessionOptionsAppendExecutionProvider_CUDA_V2;
+        public IntPtr CreateCUDAProviderOptions;
+        public IntPtr UpdateCUDAProviderOptions;
+        public IntPtr GetCUDAProviderOptionsAsString;
+        public IntPtr ReleaseCUDAProviderOptions;
+        public IntPtr SessionOptionsAppendExecutionProvider_MIGraphX;
+        public IntPtr AddExternalInitializers;
+        public IntPtr CreateOpAttr;
+        public IntPtr ReleaseOpAttr;
+        public IntPtr CreateOp;
+        public IntPtr InvokeOp;
+        public IntPtr ReleaseOp;
+        public IntPtr SessionOptionsAppendExecutionProvider;
+        public IntPtr CopyKernelInfo;
+        public IntPtr ReleaseKernelInfo;
+
+        public IntPtr GetTrainingApi;
+        public IntPtr SessionOptionsAppendExecutionProvider_CANN;
+        public IntPtr CreateCANNProviderOptions;
+        public IntPtr UpdateCANNProviderOptions;
+        public IntPtr GetCANNProviderOptionsAsString;
+        public IntPtr ReleaseCANNProviderOptions;
+        public IntPtr MemoryInfoGetDeviceType;
+        public IntPtr UpdateEnvWithCustomLogLevel;
     }
 
     internal static class NativeMethods
@@ -397,12 +422,41 @@ namespace Microsoft.ML.OnnxRuntime
             OrtUpdateTensorRTProviderOptions = (DOrtUpdateTensorRTProviderOptions)Marshal.GetDelegateForFunctionPointer(api_.UpdateTensorRTProviderOptions, typeof(DOrtUpdateTensorRTProviderOptions));
             OrtGetTensorRTProviderOptionsAsString = (DOrtGetTensorRTProviderOptionsAsString)Marshal.GetDelegateForFunctionPointer(api_.GetTensorRTProviderOptionsAsString, typeof(DOrtGetTensorRTProviderOptionsAsString));
             OrtReleaseTensorRTProviderOptions = (DOrtReleaseTensorRTProviderOptions)Marshal.GetDelegateForFunctionPointer(api_.ReleaseTensorRTProviderOptions, typeof(DOrtReleaseTensorRTProviderOptions));
+
+            SessionOptionsAppendExecutionProvider_CUDA = (DSessionOptionsAppendExecutionProvider_CUDA)Marshal.GetDelegateForFunctionPointer(
+                                                 api_.SessionOptionsAppendExecutionProvider_CUDA, typeof(DSessionOptionsAppendExecutionProvider_CUDA));
+            SessionOptionsAppendExecutionProvider_CUDA_V2 = (DSessionOptionsAppendExecutionProvider_CUDA_V2)Marshal.GetDelegateForFunctionPointer(
+                                                 api_.SessionOptionsAppendExecutionProvider_CUDA_V2, typeof(DSessionOptionsAppendExecutionProvider_CUDA_V2));
+            OrtCreateCUDAProviderOptions = (DOrtCreateCUDAProviderOptions)Marshal.GetDelegateForFunctionPointer(api_.CreateCUDAProviderOptions, typeof(DOrtCreateCUDAProviderOptions));
+            OrtUpdateCUDAProviderOptions = (DOrtUpdateCUDAProviderOptions)Marshal.GetDelegateForFunctionPointer(api_.UpdateCUDAProviderOptions, typeof(DOrtUpdateCUDAProviderOptions));
+            OrtGetCUDAProviderOptionsAsString = (DOrtGetCUDAProviderOptionsAsString)Marshal.GetDelegateForFunctionPointer(api_.GetCUDAProviderOptionsAsString, typeof(DOrtGetCUDAProviderOptionsAsString));
+            OrtReleaseCUDAProviderOptions = (DOrtReleaseCUDAProviderOptions)Marshal.GetDelegateForFunctionPointer(api_.ReleaseCUDAProviderOptions, typeof(DOrtReleaseCUDAProviderOptions));
+            SessionOptionsAppendExecutionProvider
+                = (DSessionOptionsAppendExecutionProvider)Marshal.GetDelegateForFunctionPointer(
+                    api_.SessionOptionsAppendExecutionProvider,
+                    typeof(DSessionOptionsAppendExecutionProvider));
+            OrtUpdateEnvWithCustomLogLevel = (DOrtUpdateEnvWithCustomLogLevel)Marshal.GetDelegateForFunctionPointer(api_.UpdateEnvWithCustomLogLevel, typeof(DOrtUpdateEnvWithCustomLogLevel));
         }
+
+        internal class NativeLib
+        {
+#if __ANDROID__
+        // define the library name required for android
+        internal const string DllName = "libonnxruntime.so";
+#elif __IOS__
+        // define the library name required for iOS
+        internal const string DllName = "__Internal";
+#else
+            internal const string DllName = "onnxruntime";
+#endif
+            // TODO: Does macos need special handling or will 'onnxruntime' -> libonnxruntime.dylib?
+        }
+
 
         [DllImport(NativeLib.DllName, CharSet = CharSet.Ansi)]
         public static extern ref OrtApiBase OrtGetApiBase();
 
-        #region Runtime/Environment API
+#region Runtime/Environment API
 
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         public delegate IntPtr /* OrtStatus* */DOrtCreateEnv(LogLevel default_warning_level, string logId, out IntPtr /*(OrtEnv*)*/ env);
@@ -420,6 +474,10 @@ namespace Microsoft.ML.OnnxRuntime
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         public delegate IntPtr /* OrtStatus* */DOrtDisableTelemetryEvents(IntPtr /*(OrtEnv*)*/ env);
         public static DOrtDisableTelemetryEvents OrtDisableTelemetryEvents;
+
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        public delegate IntPtr /* OrtStatus* */DOrtUpdateEnvWithCustomLogLevel(IntPtr /*(OrtEnv*)*/ env, LogLevel custom_log_level);
+        public static DOrtUpdateEnvWithCustomLogLevel OrtUpdateEnvWithCustomLogLevel;
 
         #endregion Runtime/Environment API
 
@@ -469,9 +527,52 @@ namespace Microsoft.ML.OnnxRuntime
         public delegate void DOrtReleaseTensorRTProviderOptions(IntPtr /*(OrtTensorRTProviderOptions*)*/ trtProviderOptionsInstance);
         public static DOrtReleaseTensorRTProviderOptions OrtReleaseTensorRTProviderOptions;
 
-        #endregion
+        /// <summary>
+        /// Creates native OrtCUDAProviderOptions instance
+        /// </summary>
+        /// <param name="cudaProviderOptionsInstance">(output) native instance of OrtCUDAProviderOptions</param>
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        public delegate IntPtr /* OrtStatus* */DOrtCreateCUDAProviderOptions(
+            out IntPtr /*(OrtCUDAProviderOptions**)*/ cudaProviderOptionsInstance);
+        public static DOrtCreateCUDAProviderOptions OrtCreateCUDAProviderOptions;
 
-        #region Status API
+        /// <summary>
+        /// Updates native OrtCUDAProviderOptions instance using given key/value pairs
+        /// </summary>
+        /// <param name="cudaProviderOptionsInstance">native instance of OrtCUDAProviderOptions</param>
+        /// <param name="providerOptionsKeys">configuration keys of OrtCUDAProviderOptions</param>
+        /// <param name="providerOptionsValues">configuration values of OrtCUDAProviderOptions</param>
+        /// <param name="numKeys">number of configuration keys</param>
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        public delegate IntPtr /* OrtStatus* */DOrtUpdateCUDAProviderOptions(
+            IntPtr /*(OrtCUDAProviderOptions*)*/ cudaProviderOptionsInstance,
+            IntPtr[] /*(const char* const *)*/ providerOptionsKeys,
+            IntPtr[] /*(const char* const *)*/ providerOptionsValues,
+            UIntPtr /*(size_t)*/ numKeys);
+        public static DOrtUpdateCUDAProviderOptions OrtUpdateCUDAProviderOptions;
+
+        /// <summary>
+        /// Get native OrtCUDAProviderOptionsV2 in serialized string
+        /// </summary>
+        /// <param name="allocator">instance of OrtAllocator</param>
+        /// <param name="ptr">is a UTF-8 null terminated string allocated using 'allocator'</param>
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        public delegate IntPtr /* OrtStatus* */DOrtGetCUDAProviderOptionsAsString(
+            IntPtr /*(OrtCUDAProviderOptionsV2**)*/ cudaProviderOptionsInstance,
+            IntPtr /*(OrtAllocator*)*/ allocator,
+            out IntPtr /*(char**)*/ptr);
+        public static DOrtGetCUDAProviderOptionsAsString OrtGetCUDAProviderOptionsAsString;
+
+        /// <summary>
+        /// Releases native OrtCUDAProviderOptions instance
+        /// </summary>
+        /// <param name="cudaProviderOptionsInstance">native instance of OrtCUDAProviderOptions to be released</param>
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        public delegate void DOrtReleaseCUDAProviderOptions(IntPtr /*(OrtCUDAProviderOptions*)*/ cudaProviderOptionsInstance);
+        public static DOrtReleaseCUDAProviderOptions OrtReleaseCUDAProviderOptions;
+#endregion
+
+#region Status API
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         public delegate ErrorCode DOrtGetErrorCode(IntPtr /*(OrtStatus*)*/status);
         public static DOrtGetErrorCode OrtGetErrorCode;
@@ -486,9 +587,9 @@ namespace Microsoft.ML.OnnxRuntime
         public delegate void DOrtReleaseStatus(IntPtr /*(OrtStatus*)*/ statusPtr);
         public static DOrtReleaseStatus OrtReleaseStatus;
 
-        #endregion Status API
+#endregion Status API
 
-        #region InferenceSession API
+#region InferenceSession API
 
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         public delegate IntPtr /* OrtStatus* */DOrtCreateSession(
@@ -505,7 +606,7 @@ namespace Microsoft.ML.OnnxRuntime
         /// </summary>
         /// <param name="environment">Native OrtEnv instance</param>
         /// <param name="modelPath">UTF-8 bytes corresponding to model string path</param>
-        /// <param name="sessionOptions">Native SessionOptions instance</param>         
+        /// <param name="sessionOptions">Native SessionOptions instance</param>
         /// <param name="prepackedWeightsContainer">Native OrtPrepackedWeightsContainer instance</param>
         /// <param name="session">(Output) Created native OrtSession instance</param>
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
@@ -533,7 +634,7 @@ namespace Microsoft.ML.OnnxRuntime
         /// <param name="environment">Native OrtEnv instance</param>
         /// <param name="modelData">Byte array correspoonding to the model</param>
         /// <param name="modelSize">Size of the model in bytes</param>
-        /// <param name="sessionOptions">Native SessionOptions instance</param>         
+        /// <param name="sessionOptions">Native SessionOptions instance</param>
         /// <param name="prepackedWeightsContainer">Native OrtPrepackedWeightsContainer instance</param>
         /// <param name="session">(Output) Created native OrtSession instance</param>
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
@@ -664,9 +765,9 @@ namespace Microsoft.ML.OnnxRuntime
                                                 out UIntPtr /*(ulong* out)*/ startTime);
         public static DOrtSessionGetProfilingStartTimeNs OrtSessionGetProfilingStartTimeNs;
 
-        #endregion InferenceSession API
+#endregion InferenceSession API
 
-        #region SessionOptions API
+#region SessionOptions API
 
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         public delegate IntPtr /*(OrtStatus*)*/ DOrtCreateSessionOptions(out IntPtr /*(OrtSessionOptions**)*/ sessionOptions);
@@ -749,6 +850,14 @@ namespace Microsoft.ML.OnnxRuntime
                                                                           IntPtr /* const char* */ configValue);
         public static DOrtAddSessionConfigEntry OrtAddSessionConfigEntry;
 
+        //
+        // The below OrtSessionOptionsAppendExecutionProvider_XYZ calls are using a publicly exported symbol from the
+        // ONNX Runtime library for the EP (defined in the EP's provider factory .cc file) and not a function pointer
+        // in OrtApis. This mechanism is being deprecated in favor of using OrtApis, as the latter has the ability to
+        // return a graceful message if the EP is not included in the build.
+        // New EPs should use OrtApis, preferably leveraging the generic SessionOptionsAppendExecutionProvider
+        // entry point where optional provider configuration key/value pairs can be passed in.
+
         ///**
         //  * The order of invocation indicates the preference order as well. In other words call this method
         //  * on your most preferred execution provider first followed by the less preferred ones.
@@ -757,17 +866,18 @@ namespace Microsoft.ML.OnnxRuntime
         [DllImport(NativeLib.DllName, CharSet = CharSet.Ansi)]
         public static extern IntPtr /*(OrtStatus*)*/ OrtSessionOptionsAppendExecutionProvider_CPU(IntPtr /*(OrtSessionOptions*) */ options, int use_arena);
 
-#if __MOBILE__
 #if __ANDROID__
         [DllImport(NativeLib.DllName, CharSet = CharSet.Ansi)]
         public static extern IntPtr /*(OrtStatus*)*/ OrtSessionOptionsAppendExecutionProvider_Nnapi(IntPtr /*(OrtSessionOptions*)*/ options, uint nnapi_flags);
 #endif
 
-#if __IOS__
+#if __ENABLE_COREML__
+        // CoreML is available on iOS and macOS so we can't exclude based on __MOBILE__ && __IOS__
         [DllImport(NativeLib.DllName, CharSet = CharSet.Ansi)]
         public static extern IntPtr /*(OrtStatus*)*/ OrtSessionOptionsAppendExecutionProvider_CoreML(IntPtr /*(OrtSessionOptions*)*/ options, uint coreml_flags);
 #endif
-#else
+
+#if !__MOBILE__
         // on non-mobile platforms any of these EPs are possible
         [DllImport(NativeLib.DllName, CharSet = CharSet.Ansi)]
         public static extern IntPtr /*(OrtStatus*)*/ OrtSessionOptionsAppendExecutionProvider_Dnnl(IntPtr /*(OrtSessionOptions*) */ options, int use_arena);
@@ -791,7 +901,7 @@ namespace Microsoft.ML.OnnxRuntime
         public static extern IntPtr /*(OrtStatus*)*/ OrtSessionOptionsAppendExecutionProvider_MIGraphX(IntPtr /*(OrtSessionOptions*)*/ options, int device_id);
 
         [DllImport(NativeLib.DllName, CharSet = CharSet.Ansi)]
-        public static extern IntPtr /*(OrtStatus*)*/ OrtSessionOptionsAppendExecutionProvider_Nuphar(IntPtr /*(OrtSessionOptions*) */ options, int allow_unaligned_buffers, IntPtr /*(char char*)*/ settings);
+        public static extern IntPtr /*(OrtStatus*)*/ OrtSessionOptionsAppendExecutionProvider_Tvm(IntPtr /*(OrtSessionOptions*) */ options, IntPtr /*(char char*)*/ settings);
 #endif
         /// <summary>
         /// Append a TensorRT EP instance (configured based on given provider options) to the native OrtSessionOptions instance
@@ -816,6 +926,30 @@ namespace Microsoft.ML.OnnxRuntime
                                                IntPtr /*(const OrtTensorRTProviderOptionsV2*)*/ trtProviderOptions);
 
         public static DSessionOptionsAppendExecutionProvider_TensorRT_V2 SessionOptionsAppendExecutionProvider_TensorRT_V2;
+
+        /// <summary>
+        /// Append a CUDA EP instance (configured based on given provider options) to the native OrtSessionOptions instance
+        /// </summary>
+        /// <param name="options">Native OrtSessionOptions instance</param>
+        /// <param name="cudaProviderOptions">Native OrtCUDAProviderOptions instance</param>
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        public delegate IntPtr /*(OrtStatus*)*/DSessionOptionsAppendExecutionProvider_CUDA(
+                                               IntPtr /*(OrtSessionOptions*)*/ options,
+                                               IntPtr /*(const OrtCUDAProviderOptions*)*/ cudaProviderOptions);
+
+        public static DSessionOptionsAppendExecutionProvider_CUDA SessionOptionsAppendExecutionProvider_CUDA;
+
+        /// <summary>
+        /// Append a CUDA EP instance (configured based on given provider options) to the native OrtSessionOptions instance
+        /// </summary>
+        /// <param name="options">Native OrtSessionOptions instance</param>
+        /// <param name="cudaProviderOptions">Native OrtCUDAProviderOptionsV2 instance</param>
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        public delegate IntPtr /*(OrtStatus*)*/DSessionOptionsAppendExecutionProvider_CUDA_V2(
+                                               IntPtr /*(OrtSessionOptions*)*/ options,
+                                               IntPtr /*(const OrtCUDAProviderOptionsV2*)*/ cudaProviderOptions);
+
+        public static DSessionOptionsAppendExecutionProvider_CUDA_V2 SessionOptionsAppendExecutionProvider_CUDA_V2;
 
         /// <summary>
         /// Free Dimension override (by denotation)
@@ -869,9 +1003,31 @@ namespace Microsoft.ML.OnnxRuntime
 
         public static DOrtAddInitializer OrtAddInitializer;
 
-        #endregion
+        /// <summary>
+        /// Append an execution provider instance to the native OrtSessionOptions instance.
+        ///
+        /// 'SNPE' and 'XNNPACK' are currently supported as providerName values.
+        ///
+        /// The number of providerOptionsKeys must match the number of providerOptionsValues and equal numKeys.
+        /// </summary>
+        /// <param name="options">Native OrtSessionOptions instance</param>
+        /// <param name="providerName">Execution provider to add.</param>
+        /// <param name="providerOptionsKeys">Configuration keys to add</param>
+        /// <param name="providerOptionsValues">Configuration values to add</param>
+        /// <param name="numKeys">Number of configuration keys</param>
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        public delegate IntPtr /*(OrtStatus*)*/DSessionOptionsAppendExecutionProvider(
+                                               IntPtr /*(OrtSessionOptions*)*/ options,
+                                               IntPtr /*(const char*)*/ providerName,
+                                               IntPtr[] /*(const char* const *)*/ providerOptionsKeys,
+                                               IntPtr[] /*(const char* const *)*/ providerOptionsValues,
+                                               UIntPtr /*(size_t)*/ numKeys);
 
-        #region RunOptions API
+        public static DSessionOptionsAppendExecutionProvider SessionOptionsAppendExecutionProvider;
+
+#endregion
+
+#region RunOptions API
 
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         public delegate IntPtr /*(OrtStatus*)*/ DOrtCreateRunOptions(out IntPtr /* OrtRunOptions** */ runOptions);
@@ -915,9 +1071,9 @@ namespace Microsoft.ML.OnnxRuntime
         public delegate IntPtr /*(OrtStatus*)*/ DOrtRunOptionsUnsetTerminate(IntPtr /* OrtRunOptions* */ options);
         public static DOrtRunOptionsUnsetTerminate OrtRunOptionsUnsetTerminate;
 
-        #endregion
+#endregion
 
-        #region Allocator/MemoryInfo API
+#region Allocator/MemoryInfo API
 
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         public delegate IntPtr /* (OrtStatus*)*/ DOrtCreateMemoryInfo(
@@ -1056,9 +1212,9 @@ namespace Microsoft.ML.OnnxRuntime
 
         public static DOrtAllocatorFree OrtAllocatorFree;
 
-        #endregion Allocator/MemoryInfo API
+#endregion Allocator/MemoryInfo API
 
-        #region IoBinding API
+#region IoBinding API
 
         /// <summary>
         /// Create OrtIoBinding instance that is used to bind memory that is allocated
@@ -1246,9 +1402,9 @@ namespace Microsoft.ML.OnnxRuntime
 
         public static DOrtSetLanguageProjection OrtSetLanguageProjection;
 
-        #endregion IoBinding API
+#endregion IoBinding API
 
-        #region ModelMetadata API
+#region ModelMetadata API
 
         /// <summary>
         /// Gets the ModelMetadata associated with an InferenceSession
@@ -1367,9 +1523,9 @@ namespace Microsoft.ML.OnnxRuntime
 
         public static DOrtReleaseModelMetadata OrtReleaseModelMetadata;
 
-        #endregion ModelMetadata API
+#endregion ModelMetadata API
 
-        #region Tensor/OnnxValue API
+#region Tensor/OnnxValue API
 
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         public delegate IntPtr /*(OrtStatus*)*/ DOrtGetValue(IntPtr /*(OrtValue*)*/ value,
@@ -1526,9 +1682,9 @@ namespace Microsoft.ML.OnnxRuntime
 
         public static DOrtReleaseValue OrtReleaseValue;
 
-        #endregion
+#endregion
 
-        #region Misc API
+#region Misc API
 
         /// <summary>
         /// Queries all the execution providers supported in the native onnxruntime shared library
@@ -1568,14 +1724,6 @@ namespace Microsoft.ML.OnnxRuntime
 
         public static DOrtReleasePrepackedWeightsContainer OrtReleasePrepackedWeightsContainer;
 
-        #endregion
-
-        public static byte[] GetPlatformSerializedString(string str)
-        {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                return System.Text.Encoding.Unicode.GetBytes(str + Char.MinValue);
-            else
-                return System.Text.Encoding.UTF8.GetBytes(str + Char.MinValue);
-        }
+#endregion
     } //class NativeMethods
 } //namespace

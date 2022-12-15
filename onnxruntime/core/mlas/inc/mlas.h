@@ -114,6 +114,22 @@ MlasGetPreferredBufferAlignment(
     void
     );
 
+#ifdef MLAS_TARGET_AMD64_IX86
+
+/**
+ * @brief Return whether the current CPU has over saturation problem
+ *        when computing u8s8 matrix multiplication
+ * https://www.intel.com/content/www/us/en/develop/documentation/onednn-developer-guide-and-reference/top/advanced-topics/nuances-of-int8-computations.html
+*/
+bool
+MLASCALL
+MlasPlatformU8S8Overflow(
+    void
+    );
+
+#endif
+
+
 //
 // Activation routines.
 //
@@ -562,14 +578,6 @@ struct MLAS_GEMM_QUANT_DATA_PARAMS {
     const MLAS_QGEMM_OUTPUT_PROCESSOR* OutputProcessor = nullptr;
 };
 
-void
-MLASCALL
-MlasGemm(
-    const MLAS_GEMM_QUANT_SHAPE_PARAMS& Shape,
-    const MLAS_GEMM_QUANT_DATA_PARAMS& DataParams,
-    MLAS_THREADPOOL* ThreadPool
-    );
-
 /**
  * @brief Batched GEMM, for multiplying multiple pairs of matrices.
  * Note:  We only support uniform batching, so shapes and types of the
@@ -589,6 +597,62 @@ MlasGemmBatch(
     const size_t BatchN,
     MLAS_THREADPOOL* ThreadPool
     );
+
+inline
+void
+MlasGemm(
+    const MLAS_GEMM_QUANT_SHAPE_PARAMS &Shape,
+    const MLAS_GEMM_QUANT_DATA_PARAMS &DataParams,
+    MLAS_THREADPOOL *ThreadPool)
+{
+    MlasGemmBatch(Shape, &DataParams, 1, ThreadPool);
+}
+
+//
+// Symmetric QGEMM has limited buffer overrun.
+// Currently only supported in ARM64
+//
+#if defined(MLAS_TARGET_ARM64)
+constexpr size_t MLAS_SYMM_QGEMM_BUF_OVERRUN = 15;
+#else
+constexpr size_t MLAS_SYMM_QGEMM_BUF_OVERRUN = 0;
+#endif
+
+/**
+ * @brief Supply data parameters for symmetric quantized GEMM.
+ *        B matrix zero point must be zero, and it must be
+ *        pre-packed, with column sums scaled by (-ZeroPointA)
+*/
+struct MLAS_SYMM_QGEMM_DATA_PARAMS {
+    const void* A = nullptr;
+    size_t lda = 0;
+    const void* B = 0;
+    void* C = nullptr;
+    size_t ldc = 0;
+    // TODO!! add re-quantization parameters
+};
+
+/**
+ * @brief   Batched QGEMM. Similar to MlasGemmBatch, but right hand side matrix
+ *          must be symmetrically quantized and prepacked.
+ *
+ * @param [IN] Shape        A single shape descriptor for all multiplicatons.
+                            Currently A and B must be signed, and accumulation
+                            mode not supported
+ * @param [IN] DataParams   Array of data descriptors, one for each mutliplication
+ *                          B must be prepacked
+ * @param [IN] BatchN       Number of multiplications
+ * @param [IN] ThreadPool 
+*/
+void
+MLASCALL
+MlasSymmQgemmBatch(
+    const MLAS_GEMM_QUANT_SHAPE_PARAMS& Shape,
+    const MLAS_SYMM_QGEMM_DATA_PARAMS* DataParams,
+    const size_t BatchN,
+    MLAS_THREADPOOL* ThreadPool
+    );
+
 
 //
 // Buffer packing routines.
@@ -633,6 +697,35 @@ MlasGemmPackB(
     void* PackedB
     );
 
+/**
+ * @brief For symmetric quantized GEMM, returns size of the
+ *        packing buffer needed for right hand side        
+ * @param N              Number of columns 
+ * @param K              Number of rows
+ * @param AIsSigned      Whether left hand size is signed int8_t
+ * @return  size of the packing buffer,
+ *          0 if operation not supported
+*/
+size_t
+MLASCALL
+MlasSymmQgemmPackBSize(
+    size_t N,
+    size_t K, 
+    bool AIsSigned
+    );
+
+void
+MLASCALL
+MlasSymmQgemmPackB(
+    size_t N,
+    size_t K,
+    const int8_t* B,
+    size_t ldb,
+    bool AIsSigned,
+    int32_t ZeroPointA,
+    void* PackedB
+    );
+
 //
 // Convolution routines.
 //
@@ -662,6 +755,7 @@ struct MLAS_CONV_PARAMETERS {
     size_t InputSize;
     size_t OutputSize;
     size_t K;
+    float Beta;
     MLAS_CONV_ALGORITHM Algorithm;
     ptrdiff_t ThreadCount;
     union {
@@ -675,25 +769,23 @@ struct MLAS_CONV_PARAMETERS {
     } u;
 };
 
-void
-MLASCALL
-MlasConvPrepare(
-    MLAS_CONV_PARAMETERS* Parameters,
-    size_t Dimensions,
-    size_t BatchCount,
-    size_t GroupCount,
-    size_t InputChannels,
-    const int64_t* InputShape,
-    const int64_t* KernelShape,
-    const int64_t* DilationShape,
-    const int64_t* Padding,
-    const int64_t* StrideShape,
-    const int64_t* OutputShape,
-    size_t FilterCount,
-    const MLAS_ACTIVATION* Activation,
-    size_t* WorkingBufferSize,
-    MLAS_THREADPOOL* ThreadPool
-    );
+void MLASCALL
+MlasConvPrepare(MLAS_CONV_PARAMETERS* Parameters,
+                size_t Dimensions,
+                size_t BatchCount,
+                size_t GroupCount,
+                size_t InputChannels,
+                const int64_t* InputShape,
+                const int64_t* KernelShape,
+                const int64_t* DilationShape,
+                const int64_t* Padding,
+                const int64_t* StrideShape,
+                const int64_t* OutputShape,
+                size_t FilterCount,
+                const MLAS_ACTIVATION* Activation,
+                size_t* WorkingBufferSize,
+                float Beta,
+                MLAS_THREADPOOL* ThreadPool);
 
 void
 MLASCALL
@@ -752,6 +844,55 @@ MlasConvSymFixupInputZeroPoint(
     int32_t zero_point_value,
     bool InputIsSigned
     );
+
+//
+// Convolution operators (or maybe others in the future) need to do their
+// own job partition. Since filters (right hand side B matrix) is usually
+// small in size, activations are divided horizontally. We need to provide
+// kernel stride units to facilitate the divide.
+//
+
+int32_t
+MlasConvSymGetKernelOutputCount(
+    bool InputIsSigned
+    );
+
+int32_t
+MlasConvSymDepthwiseGetKernelOutputCnt(
+    bool InputIsSigned
+    );
+
+/**
+ * @brief Returns the stride M of depthwise conv kernel
+ * 
+ * Most optimized path is Symmetric conv. See 
+ * MlasConvSymDepthwiseGetKernelOutputCnt(bool)
+ * 
+ * These kernels are implemented in qdwconv.cpp using
+ * intrincic, all of them with stride val 1. We use
+ * a slightly bigger value to improve cache reuse.
+ *
+ * This needs to be changed if we optimize depthwise
+ * kernels.
+ * 
+ * @return
+*/
+inline
+int32_t
+MlasConvDepthwiseGetKernelOutputCnt()
+{
+    return 4;
+}
+
+int32_t
+MlasSymmQgemmGetKernelOutputCnt();
+
+int32_t
+MlasQgemmGetKernelOutputCnt(
+    bool AIsSigned,
+    bool BIsSigned
+    );
+
 
 struct MLAS_CONV_SYM_PARAMS {
     const void* InputDirect;

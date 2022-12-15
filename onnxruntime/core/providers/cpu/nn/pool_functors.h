@@ -15,8 +15,8 @@ struct Pool1DTask final {
   int64_t pooled_height;
   int64_t stride_h;
   int64_t height;
-  const std::vector<int64_t>& kernel_shape;
-  const std::vector<int64_t>& pads;
+  gsl::span<const int64_t> kernel_shape;
+  gsl::span<const int64_t> pads;
   const PoolProcessContext& pool_context_;
   const PoolAttributes& pool_attrs_;
   TensorOpCost Cost() {
@@ -25,10 +25,7 @@ struct Pool1DTask final {
   }
 
   void operator()(std::ptrdiff_t begin, std::ptrdiff_t end) const {
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-    for (int64_t c = begin; c < end; ++c) {
+    for (std::ptrdiff_t c = begin; c < end; ++c)  {
       operator()(c);
     }
   }
@@ -66,8 +63,8 @@ struct Pool2DTask final {
   int64_t stride_w;
   int64_t height;
   int64_t width;
-  const std::vector<int64_t>& kernel_shape;
-  const std::vector<int64_t>& pads;
+  gsl::span<const int64_t> kernel_shape;
+  gsl::span<const int64_t> pads;
   const PoolProcessContext& pool_context_;
   const PoolAttributes& pool_attrs_;
 
@@ -77,10 +74,7 @@ struct Pool2DTask final {
   }
 
   void operator()(std::ptrdiff_t begin, std::ptrdiff_t end) const {
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-    for (int64_t c = begin; c < end; ++c) {
+    for (std::ptrdiff_t c = begin; c < end; ++c)  {
       operator()(c);
     }
   }
@@ -131,8 +125,8 @@ struct Pool3DTask final {
   int64_t height;
   int64_t width;
   int64_t depth;
-  const std::vector<int64_t>& kernel_shape;
-  const std::vector<int64_t>& pads;
+  gsl::span<const int64_t> kernel_shape;
+  gsl::span<const int64_t> pads;
   const PoolProcessContext& pool_context_;
   const PoolAttributes& pool_attrs_;
 
@@ -143,10 +137,7 @@ struct Pool3DTask final {
   }
 
   void operator()(std::ptrdiff_t begin, std::ptrdiff_t end) const {
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-    for (int64_t c = begin; c < end; ++c) {
+    for (std::ptrdiff_t c = begin; c < end; ++c)  {
       operator()(c);
     }
   }
@@ -200,18 +191,15 @@ struct MaxPool1DTask final {
   int64_t pooled_height;
   int64_t stride_h;
   int64_t height;
-  const std::vector<int64_t>& kernel_shape;
-  const std::vector<int64_t>& pads;
+  gsl::span<const int64_t> kernel_shape;
+  gsl::span<const int64_t> pads;
   TensorOpCost Cost() {
     double loop_count = static_cast<double>(pooled_height * kernel_shape[0]);
     return TensorOpCost{loop_count, loop_count, loop_count};
   }
 
   void operator()(std::ptrdiff_t begin, std::ptrdiff_t end) const {
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-    for (int64_t c = begin; c < end; ++c) {
+    for (std::ptrdiff_t c = begin; c < end; ++c)  {
       operator()(c);
     }
   }
@@ -254,8 +242,8 @@ struct MaxPool2DTask final {
   int64_t stride_w;
   int64_t height;
   int64_t width;
-  const std::vector<int64_t>& kernel_shape;
-  const std::vector<int64_t>& pads;
+  gsl::span<const int64_t> kernel_shape;
+  gsl::span<const int64_t> pads;
   int64_t storage_order;
 
   TensorOpCost Cost() {
@@ -264,10 +252,7 @@ struct MaxPool2DTask final {
   }
 
   void operator()(std::ptrdiff_t begin, std::ptrdiff_t end) const {
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-    for (int64_t c = begin; c < end; ++c) {
+    for (std::ptrdiff_t c = begin; c < end; ++c)  {
       operator()(c);
     }
   }
@@ -328,15 +313,12 @@ struct MaxPool3DTask {
   int64_t height;
   int64_t width;
   int64_t depth;
-  const std::vector<int64_t>& kernel_shape;
-  const std::vector<int64_t>& pads;
+  gsl::span<const int64_t> kernel_shape;
+  gsl::span<const int64_t> pads;
   int64_t storage_order;
 
   void operator()(std::ptrdiff_t begin, std::ptrdiff_t end) const {
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-    for (int64_t c = begin; c < end; ++c) {
+    for (std::ptrdiff_t c = begin; c < end; ++c)  {
       operator()(c);
     }
   }

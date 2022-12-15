@@ -1,11 +1,12 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#include "core/providers/cpu/math/quantize_linear_matmul.h"
+#include "core/providers/cpu/quantization/quantize_linear_matmul.h"
 #include "core/mlas/inc/mlas.h"
 
 #include "gtest/gtest.h"
 #include "test/providers/provider_test_utils.h"
+#include "test/util/include/default_providers.h"
 
 namespace onnxruntime {
 namespace test {
@@ -329,6 +330,11 @@ TEST(QuantizeLinearMatmulOpTest, PerColumn_2D_S8S8) {
 }
 
 TEST(QuantizeLinearMatmulOpTest, PerColumn_ND) {
+  // TODO: Unskip when fixed #41968513
+  if (DefaultDmlExecutionProvider().get() != nullptr) {
+    GTEST_SKIP() << "Skipping because of the following error: AbiCustomRegistry.cpp(507): The parameter is incorrect.";
+  }
+
   OpTester test("QLinearMatMul", 10);
   test.AddInput<uint8_t>("a",
                          {2, 2, 4},
@@ -372,6 +378,11 @@ TEST(QuantizeLinearMatmulOpTest, PerColumn_ND) {
 }
 
 TEST(QuantizeLinearMatmulOpTest, PerColumn_ND_S8S8) {
+  // TODO: Unskip when fixed #41968513
+  if (DefaultDmlExecutionProvider().get() != nullptr) {
+    GTEST_SKIP() << "Skipping because of the following error: AbiCustomRegistry.cpp(507): The parameter is incorrect.";
+  }
+
   OpTester test("QLinearMatMul", 10);
   test.AddInput<int8_t>("a",
                         {2, 2, 4},
@@ -415,8 +426,8 @@ TEST(QuantizeLinearMatmulOpTest, PerColumn_ND_S8S8) {
 }
 
 /**
- * @brief Extend QLinearMatMul for verifying prepacking behavior 
-*/
+ * @brief Extend QLinearMatMul for verifying prepacking behavior
+ */
 struct PrePackTestOp {
   // TODO!! use template and macro to extract a common utility out of this
   //   for grey box kernel testing by extending kernel classes.
@@ -487,7 +498,7 @@ TEST(QuantizeLinearMatmulOpTest, QLinearMatMulPrePack) {
   std::vector<ONNX_NAMESPACE::OpSchema> schemas{PrePackTestOp::OpSchema()};
   Status status;
   ASSERT_TRUE((status = registry->RegisterOpSet(schemas, PrePackTestOp::OpDomain, 10, 11)).IsOK()) << status;
-  KernelCreateFn kernel_create_fn = [](const OpKernelInfo& info) { return new typename PrePackTestOp::QLinearMatMulPrePackT(info); };
+  KernelCreateFn kernel_create_fn = [](FuncManager&, const OpKernelInfo& info, std::unique_ptr<OpKernel>& out) { out = std::make_unique<typename PrePackTestOp::QLinearMatMulPrePackT>(info); return Status::OK(); };
   auto kernel_def = PrePackTestOp::KernelDef();
   ASSERT_TRUE((status = registry->RegisterCustomKernel(kernel_def, kernel_create_fn)).IsOK()) << status;
 

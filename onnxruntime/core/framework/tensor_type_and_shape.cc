@@ -7,6 +7,7 @@
 #include <atomic>
 #include <stdexcept>
 
+#include "core/common/narrow.h"
 #include "core/common/safeint.h"
 #include "core/framework/error_code_helper.h"
 #include "core/framework/ort_value.h"
@@ -24,7 +25,10 @@ using onnxruntime::MLFloat16;
 using onnxruntime::SparseTensor;
 #endif
 using onnxruntime::Tensor;
-
+using onnxruntime::narrow;
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(disable : 26409)
+#endif
 ORT_API_STATUS_IMPL(OrtApis::CreateTensorTypeAndShapeInfo, _Outptr_ OrtTensorTypeAndShapeInfo** out) {
   API_IMPL_BEGIN
   *out = new OrtTensorTypeAndShapeInfo();
@@ -290,7 +294,7 @@ ORT_API_STATUS_IMPL(OrtApis::GetSparseTensorIndices, _In_ const OrtValue* v,
   API_IMPL_BEGIN
 #if !defined(DISABLE_SPARSE_TENSORS)
   const Tensor& indices_tensor = GetIndicesTensor(*v, indices_format);
-  *num_indices = gsl::narrow<size_t>(indices_tensor.Shape().Size());
+  *num_indices = narrow<size_t>(indices_tensor.Shape().Size());
   *indices = indices_tensor.DataRaw();
   return nullptr;
 #else
@@ -317,10 +321,10 @@ ORT_API_STATUS_IMPL(OrtApis::GetValueType, _In_ const OrtValue* v, _Out_ ONNXTyp
 }
 
 /**
-* Get the type information of an OrtValue
-* \param value
-* \return The returned value should be freed by OrtReleaseTypeInfo after use
-*/
+ * Get the type information of an OrtValue
+ * \param value
+ * \return The returned value should be freed by OrtReleaseTypeInfo after use
+ */
 ORT_API_STATUS_IMPL(OrtApis::GetTypeInfo, _In_ const OrtValue* v, _Outptr_result_maybenull_ struct OrtTypeInfo** out) {
   API_IMPL_BEGIN
   // TODO: This is consistent with the previous implementation but inconsistent with GetValueType which returns

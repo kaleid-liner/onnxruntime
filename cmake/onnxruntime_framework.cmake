@@ -47,25 +47,30 @@ else()
 target_include_directories(onnxruntime_framework PRIVATE ${ONNXRUNTIME_ROOT} ${eigen_INCLUDE_DIRS} PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 # Needed for the provider interface, as it includes training headers when training is enabled
-if (onnxruntime_ENABLE_TRAINING OR onnxruntime_ENABLE_TRAINING_OPS)
+if (onnxruntime_ENABLE_TRAINING_OPS)
   target_include_directories(onnxruntime_framework PRIVATE ${ORTTRAINING_ROOT})
   if (onnxruntime_ENABLE_TRAINING_TORCH_INTEROP)
     onnxruntime_add_include_to_target(onnxruntime_framework Python::Module)
-    target_include_directories(onnxruntime_framework PRIVATE ${PROJECT_SOURCE_DIR}/external/dlpack/include)
+    target_include_directories(onnxruntime_framework PRIVATE ${dlpack_SOURCE_DIR}/include)
   endif()
-  if (onnxruntime_USE_NCCL OR onnxruntime_USE_MPI)  
+  if (onnxruntime_USE_NCCL OR onnxruntime_USE_MPI)
     target_include_directories(onnxruntime_framework PUBLIC ${MPI_CXX_INCLUDE_DIRS})
   endif()
 endif()
-if (onnxruntime_ENABLE_TRAINING)
+
+if (onnxruntime_ENABLE_ATEN)
   # DLPack is a header-only dependency
-  set(DLPACK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/external/dlpack/include)
+  set(DLPACK_INCLUDE_DIR ${dlpack_SOURCE_DIR}/include)
   target_include_directories(onnxruntime_framework PRIVATE ${DLPACK_INCLUDE_DIR})
 endif()
-onnxruntime_add_include_to_target(onnxruntime_framework onnxruntime_common onnx onnx_proto ${PROTOBUF_LIB} flatbuffers)
+onnxruntime_add_include_to_target(onnxruntime_framework onnxruntime_common onnx onnx_proto ${PROTOBUF_LIB} flatbuffers safeint_interface Boost::mp11)
 
 if (onnxruntime_USE_MIMALLOC)
     target_link_libraries(onnxruntime_framework mimalloc-static)
+endif()
+
+if (onnxruntime_BUILD_WEBASSEMBLY)
+  target_link_libraries(onnxruntime_framework ${ABSEIL_LIBS})
 endif()
 
 set_target_properties(onnxruntime_framework PROPERTIES FOLDER "ONNXRuntime")
@@ -94,6 +99,18 @@ endif()
 if (onnxruntime_USE_CUDA)
   # link NVML library
   target_link_libraries(onnxruntime_framework nvidia-ml cudart)
+endif()
+
+if (WIN32)
+  target_compile_definitions(onnxruntime_framework PRIVATE _SCL_SECURE_NO_WARNINGS)
+endif()
+
+if (NOT onnxruntime_BUILD_SHARED_LIB)
+    install(TARGETS onnxruntime_framework
+            ARCHIVE   DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            LIBRARY   DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            RUNTIME   DESTINATION ${CMAKE_INSTALL_BINDIR}
+            FRAMEWORK DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/../include/onnxruntime/core/framework  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/onnxruntime/core)
