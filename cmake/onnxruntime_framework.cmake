@@ -98,6 +98,7 @@ endif()
 
 if (onnxruntime_USE_CUDA)
   # link NVML library
+  target_include_directories(onnxruntime_framework PRIVATE "/usr/local/cuda/include/")
   target_link_libraries(onnxruntime_framework nvidia-ml cudart)
 endif()
 

@@ -28,6 +28,7 @@
 #define GPU_ENERGY_PROFILE
 #if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
 #include "cuda_energy_profiler.h"
+#define CUDA_ENERGY_PROFILER_LOOP_REPEAT 10000
 #endif
 
 // #define TRACE_EXECUTION
@@ -324,7 +325,7 @@ Status SequentialExecutor::Execute(const SessionState& session_state, gsl::span<
       kernel_begin_time = session_state.Profiler().Start();
 
 #if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
-      profiling::GPUInspector::Instance().StartInspect();
+      profiling::GPUInspector::StartInspect();
 #endif
 
       // Calculate total input sizes for this operation.
@@ -353,7 +354,7 @@ Status SequentialExecutor::Execute(const SessionState& session_state, gsl::span<
 #if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
         if(is_profiler_enabled)
         {
-          unsigned int loop_repeat = profiling::GPUInspector::Instance().GetLoopRepeat();
+          unsigned int loop_repeat = CUDA_ENERGY_PROFILER_LOOP_REPEAT;
           for(unsigned int i = 0; i < loop_repeat; i++)
           {
             compute_status = p_op_kernel->Compute(&op_kernel_context);
@@ -412,21 +413,22 @@ Status SequentialExecutor::Execute(const SessionState& session_state, gsl::span<
 #endif
 
 #if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
-      profiling::GPUInspector::Instance().StopInspect();
-      unsigned int loop_repeat = profiling::GPUInspector::Instance().GetLoopRepeat();
-      std::vector<double> energies;
-      profiling::GPUInspector::Instance().CalculateEnergy(energies);
-      std::string gpu_energy = "[";
-      for(size_t i = 0; i < energies.size(); i++)
+      profiling::GPUInspector::StopInspect();
+      unsigned int loop_repeat = CUDA_ENERGY_PROFILER_LOOP_REPEAT;
+      std::unordered_map<unsigned int, double> energies;
+      profiling::GPUInspector::CalculateEnergy(energies);
+      std::map<unsigned int, double> energies_sorted(energies.begin(), energies.end());
+      std::string gpu_energy = "";
+      for(const auto & it : energies_sorted)
       {
-        gpu_energy += std::to_string(energies[i] / static_cast<double>(loop_repeat));
-        if(i < energies.size() - 1)
+        if(!gpu_energy.empty())
         {
           gpu_energy += ",";
         }
+        gpu_energy += std::to_string(it.second / static_cast<double>(loop_repeat));
       }
-      gpu_energy += "]";
-      double latency = profiling::GPUInspector::Instance().GetDurationInSec() / static_cast<double>(loop_repeat);
+      gpu_energy = "[" + gpu_energy + "]";
+      double latency = profiling::GPUInspector::GetDurationInSec() / static_cast<double>(loop_repeat);
 #endif
 
       session_state.Profiler().EndTimeAndRecordEvent(profiling::NODE_EVENT,

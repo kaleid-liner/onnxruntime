@@ -1,9 +1,6 @@
 #pragma once
-#ifndef CUDA_ENERGY_PROFILER_H
-#define CUDA_ENERGY_PROFILER_H
 
 #define GPU_ENERGY_PROFILE
-
 #if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
 
 //////////////////////////////////////////////////////////////////////////////
@@ -71,15 +68,21 @@ private:
 #endif // CUDA_ENERGY_PROFILER_TIMER_H
 
 
-#include <vector>
-#include <thread>
-#include <memory>
-#include <nvml.h>
+#ifndef CUDA_ENERGY_PROFILER_H
+#define CUDA_ENERGY_PROFILER_H
 
+#include <vector>
+#include <unordered_map>
+#include <memory>
+
+#ifdef USE_CTPL_THREAD_POOL
 namespace ctpl
 {
   class thread_pool;
 }
+#else
+#include <thread>
+#endif
 
 namespace onnxruntime {
 
@@ -97,7 +100,10 @@ namespace profiling {
   DISALLOW_COPY_AND_ASSIGNMENT(TypeName);           \
   DISALLOW_MOVE(TypeName)
 
-class GPUInspector
+class Timer;
+struct GPUInfoContainer;
+
+class GPUInspector final
 {
  public:
   struct GPUInfo_t
@@ -108,55 +114,53 @@ class GPUInspector
     double temperature{};
     double memory_util{};
     double gpu_util{};
+    double energy_since_boot{};
   };
 
   ~GPUInspector();
-  static GPUInspector& Instance();
-  bool Init(double sampling_interval = 0.05, bool parallel_reading = false);
-  static GPUInfo_t GetGPUInfo(const nvmlDevice_t& device);
-  GPUInfo_t GetGPUInfo(unsigned int gpu_id);
-  void StartInspect();
-  void StopInspect();
-  void ExportReadings(unsigned int gpu_id, std::vector<GPUInfo_t>& readings) const;
-  void ExportAllReadings(std::vector<std::vector<GPUInfo_t>>& all_readings) const;
-  unsigned int NumDevices() const;
+  
+  static unsigned int NumTotalDevices();
+  static unsigned int NumInspectedDevices();
+  static void InspectedDeviceIds(std::vector<unsigned int>& device_ids);
+  static GPUInfo_t GetGPUInfo(unsigned int gpu_id);
+
+  static void StartInspect();
+  static void StopInspect();
+  static void ExportReadings(unsigned int gpu_id, std::vector<GPUInfo_t>& readings);
+  static void ExportAllReadings(std::unordered_map<unsigned int, std::vector<GPUInfo_t>>& all_readings);
+
   static double CalculateEnergy(const std::vector<GPUInfo_t>& readings);
-  double CalculateEnergy(unsigned int gpu_id) const;
-  void CalculateEnergy(std::vector<double>& energies) const;
-  double GetDurationInSec();
-  unsigned int GetLoopRepeat() const { return loop_repeat_; }
-  void SetLoopRepeat(unsigned int repeat) { loop_repeat_ = repeat; }
+  static double CalculateEnergy(unsigned int gpu_id);
+  static void CalculateEnergy(std::unordered_map<unsigned int, double>& energies);
+  static double GetDurationInSec();
+
+  static void Initialize() { Instance(); }
+  static bool Reset(std::vector<unsigned int> gpu_ids = {}, double sampling_interval = 0.05);
 
  private:
+  // sigleton
   DISALLOW_COPY_ASSIGNMENT_AND_MOVE(GPUInspector);
   GPUInspector();
-  inline void CheckInit() const;
-  void Run();
+  static GPUInspector& Instance();
+  // implementation
+  bool _init(std::vector<unsigned int> gpu_ids = {}, double sampling_interval = 0.05);
+  void _run();
+  void _start_inspect();
+  void _stop_inspect();
 
-  bool initialized_{false};
   bool running_inspect_{false};
-  bool parallel_reading_{false};
-  unsigned int loop_repeat_{1};
   double sampling_interval_micro_second_{0.05 * 1000000};
+
+#ifdef USE_CTPL_THREAD_POOL
   std::unique_ptr<ctpl::thread_pool> pthread_pool_{nullptr};
+  void _thread_pool_wait_ready();
+#else
+  std::shared_ptr<std::thread> pthread_inspect_{nullptr};
+#endif
 
-  std::vector<nvmlDevice_t> devices_;
-  Timer timer_;
-  std::vector<std::vector<GPUInfo_t>> recordings_;
+  std::shared_ptr<Timer> timer_{nullptr};
+  std::shared_ptr<GPUInfoContainer> recording_container_{nullptr};
 
-//   // for debugging
-//  public:
-//   struct Log_t
-//   {
-//     int thread_id;
-//     int gpu_id;
-//     double start_time;
-//     double end_time;
-//     Log_t() : thread_id(0), gpu_id(0), start_time(0), end_time(0) {}
-//     Log_t(int thread_id, int gpu_id, double start_time, double end_time) : 
-//         thread_id(thread_id), gpu_id(gpu_id), start_time(start_time), end_time(end_time) {}
-//   };
-//   std::vector<std::vector<Log_t>> running_logs_;
 };
 
 using GPUInfo_t = GPUInspector::GPUInfo_t;
@@ -164,5 +168,6 @@ using GPUInfo_t = GPUInspector::GPUInfo_t;
 }  // namespace profiling
 }  // namespace onnxruntime
 
-#endif  // #if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
 #endif  // CUDA_ENERGY_PROFILER_H
+
+#endif  // #if defined(USE_CUDA) && defined(GPU_ENERGY_PROFILE)
