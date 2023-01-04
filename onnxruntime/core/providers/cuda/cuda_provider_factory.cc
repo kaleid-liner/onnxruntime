@@ -14,6 +14,8 @@
 #include "core/providers/cuda/gpu_data_transfer.h"
 #include "core/providers/cuda/math/unary_elementwise_ops_impl.h"
 
+#include "core/providers/cuda/algo_preset.h"
+
 #ifdef ENABLE_NVTX_PROFILE
 #include "nvtx_profile.h"
 #endif
@@ -187,6 +189,8 @@ struct CUDA_Provider : Provider {
 
   std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory(const void* void_params) override {
     auto params = reinterpret_cast<const OrtCUDAProviderOptions*>(void_params);
+
+    AlgoPreset::Instance().Load(params->algo_preset_file);
 
     CUDAExecutionProviderInfo info{};
     info.device_id = gsl::narrow<OrtDevice::DeviceId>(params->device_id);

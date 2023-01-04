@@ -29,6 +29,7 @@ const DeleteOnUnloadPtr<EnumNameMapping<OrtCudnnConvAlgoSearch>> ort_cudnn_conv_
     {OrtCudnnConvAlgoSearchExhaustive, "EXHAUSTIVE"},
     {OrtCudnnConvAlgoSearchHeuristic, "HEURISTIC"},
     {OrtCudnnConvAlgoSearchDefault, "DEFAULT"},
+    {OrtCudnnConvAlgoSearchPreset, "PRESET"},
 };
 
 const DeleteOnUnloadPtr<EnumNameMapping<ArenaExtendStrategy>> arena_extend_strategy_mapping = new EnumNameMapping<ArenaExtendStrategy>{

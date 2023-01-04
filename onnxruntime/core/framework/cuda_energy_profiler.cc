@@ -217,7 +217,7 @@ void GPUInspector::StartInspect()
 {
     CheckInit();
     cudaDeviceSynchronize();
-    auto run_func = [this](int thread_id)
+    auto run_func = [this](int)
     {
         Run();
     };
@@ -361,7 +361,7 @@ void GPUInspector::Run()
         // get readings
         if(parallel_reading_)
         {
-            auto add_gpu_info = [this](int thread_id, int gpu_id, double time_stamp)
+            auto add_gpu_info = [this](int, int gpu_id, double time_stamp)
             {
                 // timeval startTime, endTime;
                 // gettimeofday(&startTime, NULL);

@@ -5,6 +5,7 @@
 #include "core/providers/cuda/nn/conv.h"
 #include "core/providers/cuda/shared_inc/fpgeneric.h"
 #include "core/providers/cuda/tensor/slice.h"
+#include "core/providers/cuda/algo_preset.h"
 
 namespace onnxruntime {
 namespace cuda {
@@ -89,6 +90,7 @@ Status SliceOutUnwantedOutputSection(cudaStream_t stream,
 template <typename T>
 Status Conv<T>::UpdateState(OpKernelContext* context, bool bias_expected) const {
   //set X
+  Node().Index();
   const Tensor* X = context->Input<Tensor>(0);
   const TensorShape& x_shape = X->Shape();
   const auto x_dims = x_shape.GetDims();
@@ -245,8 +247,18 @@ Status Conv<T>::UpdateState(OpKernelContext* context, bool bias_expected) const 
       int algo_count = 1;
       const CUDAExecutionProvider* cuda_ep = static_cast<const CUDAExecutionProvider*>(this->Info().GetExecutionProvider());
       int cudnn_conv_algo = cuda_ep->GetCudnnConvAlgo();
-      ORT_ENFORCE(cudnn_conv_algo > -1 && cudnn_conv_algo < 3, "cudnn_conv_algo should be 0, 1 or 2, but got ", cudnn_conv_algo);
+      ORT_ENFORCE(cudnn_conv_algo > -1 && cudnn_conv_algo < 4, "cudnn_conv_algo should be 0, 1, 2 or 3, but got ", cudnn_conv_algo);
       switch (cudnn_conv_algo) {
+        case 3:
+          perf.algo = static_cast<decltype(perf.algo)>(AlgoPreset::Instance().GetAlgo(Node().Name()));
+          std::cout << Node().Name() << " select algorithm " << perf.algo << std::endl;
+          CUDNN_RETURN_IF_ERROR(GetWorkspaceSize(s_, perf.algo, &perf.memory));
+          if (std::is_same<T, MLFloat16>::value) {
+            perf.mathType = CUDNN_TENSOR_OP_MATH;
+          } else {
+            perf.mathType = CUDNN_DEFAULT_MATH;
+          }
+          break;
         case 0: {
           static constexpr int num_algos = CUDNN_CONVOLUTION_FWD_ALGO_COUNT;
           size_t max_ws_size = cuda_ep->GetCudnnConvUseMaxWorkspace() ? GetMaxWorkspaceSize(s_, kAllAlgos, num_algos)

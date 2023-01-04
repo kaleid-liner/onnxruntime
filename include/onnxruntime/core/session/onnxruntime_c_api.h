@@ -338,6 +338,7 @@ typedef enum OrtCudnnConvAlgoSearch {
   OrtCudnnConvAlgoSearchExhaustive,  // expensive exhaustive benchmarking using cudnnFindConvolutionForwardAlgorithmEx
   OrtCudnnConvAlgoSearchHeuristic,   // lightweight heuristic based search using cudnnGetConvolutionForwardAlgorithm_v7
   OrtCudnnConvAlgoSearchDefault,     // default algorithm using CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM
+  OrtCudnnConvAlgoSearchPreset,
 } OrtCudnnConvAlgoSearch;
 
 /** \brief CUDA Provider Options
@@ -346,7 +347,7 @@ typedef enum OrtCudnnConvAlgoSearch {
 */
 typedef struct OrtCUDAProviderOptions {
 #ifdef __cplusplus
-  OrtCUDAProviderOptions() : device_id{}, cudnn_conv_algo_search{OrtCudnnConvAlgoSearchExhaustive}, gpu_mem_limit{SIZE_MAX}, arena_extend_strategy{}, do_copy_in_default_stream{1}, has_user_compute_stream{}, user_compute_stream{}, default_memory_arena_cfg{} {}
+  OrtCUDAProviderOptions() : device_id{}, cudnn_conv_algo_search{OrtCudnnConvAlgoSearchExhaustive}, gpu_mem_limit{SIZE_MAX}, arena_extend_strategy{}, do_copy_in_default_stream{1}, has_user_compute_stream{}, user_compute_stream{}, default_memory_arena_cfg{}, algo_preset_file{} {}
 #endif
 
   /** \brief CUDA device Id
@@ -397,6 +398,9 @@ typedef struct OrtCUDAProviderOptions {
   */
   OrtArenaCfg* default_memory_arena_cfg;
 
+  /** \brief CUDA memory arena configuration parameters
+  */
+  char* algo_preset_file;
 } OrtCUDAProviderOptions;
 
 /** \brief ROCM Provider Options
