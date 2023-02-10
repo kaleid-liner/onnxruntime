@@ -7,6 +7,7 @@ namespace onnxruntime{
 AlgoPreset AlgoPreset::instance_;
 
 void AlgoPreset::Load(const std::string& filename) {
+  conv_algo_map.clear();
   std::ifstream in(filename);
   std::string kernel_name;
   int algo;

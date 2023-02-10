@@ -152,7 +152,7 @@ bool GPUInspector::Init(double sampling_interval, bool parallel_reading)
     // get device handle
     // unsigned int deviceCount = 0;
     // nvmlDeviceGetCount(&deviceCount);
-    unsigned int deviceCount = 1;
+    unsigned int deviceCount = 8;
     devices_.resize(deviceCount);
     for(unsigned int gpu_id = 0; gpu_id < deviceCount; gpu_id++)
     {
